@@ -47,22 +47,34 @@ If a user pastes a `/discover/{campaignId}` URL directly, the ID is just the pat
 
 ### Individual campaign page
 
-`GET https://contentrewards.com/discover/{campaignId}` — same embedded-JSON approach, richer fields:
+`GET https://contentrewards.com/discover/{campaignId}` — **verified against two live campaigns during implementation.** The reliable extraction point is not the React Server Component payload (which repeats keys like `id`/`title` across unrelated nested objects and is genuinely hard to parse correctly) but the page's own `<script type="application/ld+json">` blocks — schema.org structured data meant for external consumption, and well-formed JSON by construction. Each page embeds several `ld+json` blocks (site `Organization`, `WebSite`); the campaign's own data is the one with `"@type":"Product"`:
 
 ```jsonc
 {
-  // all fields above, plus:
-  "payoutRates": {
-    "tiktok":    { "cpm": 1.75, "minPayout": 3.50, "maxPayout": 2500.00 },
-    "instagram": { "cpm": 1.50, "minPayout": 4.50, "maxPayout": 2500.00 },
-    "youtube":   { "cpm": 1.75, "minPayout": 5.25, "maxPayout": 2500.00 }
-  },
-  "guidelineDocUrl": "https://docs.google.com/document/d/{docId}/edit?usp=sharing",
-  "driveFolderUrl": "https://drive.google.com/drive/folders/{folderId}?usp=sharing"
+  "@context": "https://schema.org",
+  "@type": "Product",
+  "name": "Call of Duty - Modern Warfare 4 Multiplayer Beta Gameplay Clipping",
+  "description": "Post Modern Warfare 4 Multiplayer Beta gameplay to TikTok, Instagram Reels, and YouTube Shorts. Edit the source footage into polished clips, do not post it as a raw reel.",
+  "brand": { "@type": "Organization", "name": "Clipping Culture" },
+  "image": ["https://content-rewards-production-publicassetsbucket-....s3.us-east-1.amazonaws.com/.../thumbnails/{id}.jpg"],
+  "url": "https://contentrewards.com/discover/{campaignId}"
 }
 ```
 
-The exact key names for `guidelineDocUrl`/`driveFolderUrl` need confirming against the live page during implementation (they were located by grepping the raw HTML for `docs.google.com` / `drive.google.com` substrings, not by reading a clean field name) — grep is a fine permanent strategy here too, it's simpler than depending on the RSC structure.
+Payout/platform fields are only in the RSC payload, not the `ld+json` block, but are simple enough to pull with a direct regex on the unescaped page text rather than full object parsing:
+
+```jsonc
+{
+  "platforms": ["instagram", "tiktok", "youtube"],
+  "cpmMinRateCents": 150,
+  "cpmMaxRateCents": 175,
+  "budgetCents": 10500000
+}
+```
+
+`guidelineDocUrl` and `driveFolderUrl` are found by a plain substring regex for `docs.google.com` / `drive.google.com` anywhere on the page — there's no clean field name for either. **Not every campaign links a Drive folder directly on its page** — confirmed by testing two real campaigns: ForgeGUI Clipping exposes one, MW4 Clipping does not (its raw footage source, if any, isn't on the public page at all). Treat a missing `driveFolderUrl` as a legitimate outcome, not a parse failure — such a campaign may need its footage sourced some other way (inside the guideline doc, or not automatable at all), which `footage-enumerator` and campaign registration should surface clearly rather than silently produce zero source jobs forever.
+
+Implementation lives in `src/modules/campaign-connector/parseDiscoverPageHtml.ts`, kept isolated per the module boundary in `ARCHITECTURE.md` so a Content Rewards markup change only breaks one file.
 
 ### Guideline doc (Google Docs)
 
@@ -72,7 +84,23 @@ Fetch the plain text of the doc for the `requirements-extractor`:
 GET https://docs.google.com/document/d/{docId}/export?format=txt
 ```
 
-This only works if the doc is actually public ("anyone with the link can view"). If it 302s to a Google sign-in page instead of returning `text/plain`, treat that as `campaign.status = needs_attention` with reason `guideline_doc_not_public` — per README, never attempt to authenticate around this.
+This only works if the doc is actually public ("anyone with the link can view"). If it 302s to a Google sign-in page instead of returning `text/plain`, treat that as `campaign.status = needs_attention` with reason `guideline_doc_not_public` — per README, never attempt to authenticate around this. **Verified against both real campaign docs during implementation — this endpoint returns the full plain text directly with no login wall**, even though the interactive `/edit` UI (what a browser or a naive page-fetch would hit) shows a sign-in prompt for the same doc. Always use the `/export?format=txt` endpoint, never the `/edit` URL, for exactly this reason.
+
+### Important discovery: footage isn't always on Google Drive
+
+Reading the actual MW4 guideline doc during implementation surfaced something the original plan didn't account for: **the real source-footage link lives inside the guideline doc's body text, not necessarily on the discover page**, and it isn't always Google Drive. The MW4 doc reads:
+
+```
+Content Folder: https://app.mediasilo.com/review/6a88a6c15a183a21eeeae9e6
+Do NOT use footage from any source outside the official content folders above.
+```
+
+That's [MediaSilo](https://www.mediasilo.com/), a video review platform — not Drive. ForgeGUI, by contrast, links its footage folder directly on the discover page as an actual `drive.google.com` URL (see above). So there are at least two real patterns in the wild:
+
+1. **Drive folder linked directly on the campaign page** (`driveFolderUrl` from `campaign-connector`) — ForgeGUI.
+2. **A "Content Folder" link inside the guideline doc body**, which may point at Drive, MediaSilo, or something else entirely — MW4.
+
+**Implementation implication:** `requirements-extractor`, while it already has the doc text in hand, should also scan it for a footage source link (regex for a `Content Folder:` line, or any `drive.google.com` / other known review-platform domain) and record both the URL and a `footageSourceType` (`google_drive` | `mediasilo` | `unknown`). `footage-enumerator` (see below) only actually knows how to enumerate `google_drive` sources in Phase 1. A campaign whose only footage link resolves to `mediasilo` or `unknown` should go to `needs_attention` with a clear reason (e.g. `footage_source_not_supported: mediasilo`) rather than silently producing zero source jobs forever, or — worse — guessing that it's a Drive link when it isn't. Supporting MediaSilo (or others) as a second footage source is real, scoped follow-up work, not something to fake now.
 
 ### Footage folder (Google Drive)
 

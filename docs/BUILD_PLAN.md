@@ -17,7 +17,7 @@ Phases 2-4 are intentionally not broken down to this granularity yet — do that
 - Implement URL → campaign ID resolution (direct `/discover/{id}` parse, and the `/campaigns/{id}` → 308 redirect fallback).
 - Implement discover-page JSON extraction per `API_CONTRACTS.md`.
 - Implement individual campaign page fetch for `guidelineDocUrl` / `driveFolderUrl`.
-- **Done when:** given the real MW4 campaign URL used during planning (`https://contentrewards.com/discover/24ad920b-d24f-479e-9cef-f22182e4a0c0`), the module returns title, platforms, payout data, and both linked URLs. Write this as an integration test (network-dependent, can be skipped in CI but must be runnable manually) — if Content Rewards changes markup, this is the test that catches it.
+- **Done when:** given the real MW4 campaign URL used during planning (`https://contentrewards.com/discover/24ad920b-d24f-479e-9cef-f22182e4a0c0`), the module returns title, brand, platforms, and payout data correctly (verified — see `docs/API_CONTRACTS.md`), plus the guideline doc URL; `driveFolderUrl` is legitimately `null` for this specific campaign, so don't assert it's populated for this one — assert it against the ForgeGUI campaign (`1db63081-715e-4e04-9b11-fbc1d4e8e700`) instead, which does expose one. Write this as an integration test (network-dependent, can be skipped in CI but must be runnable manually) — if Content Rewards changes markup, this is the test that catches it.
 
 ## 3. Campaign registration flow (minimal `review-api`)
 - One endpoint: `POST /campaigns { contentRewardsUrl }` → runs `campaign-connector`, inserts a `campaigns` row with `status = ingesting`, then `discovered`/`requirements_drafted` as steps complete.
