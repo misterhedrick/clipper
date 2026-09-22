@@ -4,6 +4,8 @@ Ordered Phase 1 tasks. Each task has a concrete "done when" check. Build and ver
 
 Revised 2026-09-22 for the Claude-operator design (`ARCHITECTURE.md`). The original tasks 3–14 assumed Drive-only footage, a code-based LLM extractor and a queue worker. The survey (`CAMPAIGN_SURVEY.md`) showed none of that fits. Tasks 0–2 are unchanged and done.
 
+An earlier, separate Phase 1 build on the old design (commit `c55ad2e`: Drive-only, pg-boss worker, in-app Claude API call) was merged into `develop` with this design taking precedence. Its code is no longer in the tree. The tasks below name the pieces worth porting from it.
+
 ## 0. Project scaffold ✅ done
 Fastify app, zod-validated config that fails at boot, `GET /health` backed by a real DB query.
 
@@ -47,10 +49,12 @@ Content Rewards URL → metadata + reference materials. Live canary test: `RUN_N
 - `submit`: atomic credit reservation in `credit_ledger` against the daily and per-campaign budget, `submitting` lock state, persist `opusclip_project_id` before returning.
 - Failure classification per README § Retry policy.
 - **Done when:** a short public test video submits and gets a project ID. A second `submit` on the same job returns the same project with no API call. Exceeding the budget is refused before any API call.
+- **Port, don't rewrite:** `src/lib/opusclip.ts` and `src/modules/project-creator/validateSource.ts` from the earlier Phase 1 build (commit `c55ad2e`, in `develop`'s history). They already have a typed client with retryable/permanent error classification. Adapt them to the v2 schema and the credit ledger.
 
 ## 9. `clipper sync`
 - Poll `project_created`/`processing` jobs → upsert candidates → run objective checks (`compliance`) → `awaiting_review`. Retry transient failures with backoff and a max count.
 - **Done when:** candidates appear for the task-8 project from polling alone, and a re-run creates no duplicates.
+- **Port:** `src/modules/compliance-service/` and its tests from `c55ad2e`. Its objective checks already default unverifiable checks to `manual_review_required`.
 
 ## 10. Caption validation + `candidate prescreen | set-caption`
 - `compliance.validateCaption(caption, config)`: exact-match required lines, required tags, disclosures (on their own line when required), hashtag limit.
@@ -64,6 +68,8 @@ Content Rewards URL → metadata + reference materials. Live canary test: `RUN_N
 - On approval: fetch `uriForExport` (poll if not ready), write `final.mp4`, `caption.txt`, `clip-metadata.json` and `thumbnail.jpg` to R2 → `ready_to_post`.
 - `notifier` webhook for `needs_attention`, configs waiting over 24h, and operator reports (`clipper notify`).
 - **Done when:** an approved candidate produces the full bundle in R2, and a forced validation failure delivers a real notification.
+- **Port:** `src/lib/r2.ts` (streaming multipart upload, never buffers the file), `src/modules/export/` and `src/modules/notifier/` from `c55ad2e`.
+- **Known gap from that build:** OpusClip's get-clips response has no thumbnail field. Confirm whether one exists before building `thumbnail.jpg`; otherwise ship the bundle without it and say so, rather than faking one.
 
 ## 13. Operator deployment
 - Render: web service + Render Cron Job (`clipper sync` every 10 min). No background worker.
