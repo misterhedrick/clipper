@@ -58,8 +58,8 @@ flowchart TD
   C --> D{"You confirm the config once"}
   D --> E["Claude registers footage sources and picks videos"]
   E --> F["Code validates source, checks credit budget"]
-  F --> G["Code creates OpusClip project from the public URL"]
-  G --> H["Code polls for candidate clips and runs objective checks"]
+  F --> G["Claude submits to OpusClip via the connector, with code-issued params"]
+  G --> H["Claude collects clips; code runs objective checks"]
   H --> I["Claude pre-screens candidates and drafts compliant captions"]
   I --> J{"You review"}
   J -->|Approve| K["Code packages export to Ready to Post"]
@@ -101,7 +101,7 @@ Before creating anything in OpusClip, code checks:
 - The file isn't already processed for this campaign (dedupe on a stable source key such as the Drive file ID or YouTube video ID)
 - Size/duration are within OpusClip limits (10 hours / 30 GB) and the campaign's limits
 - The campaign is active and confirmed
-- The daily and per-campaign credit budgets allow it
+- The daily and per-campaign credit budgets, and OpusClip's remaining monthly credits, allow it
 
 If validation fails, the job goes to **Needs Attention** with a clear reason. It never silently disappears or retries forever.
 
@@ -410,8 +410,8 @@ Before starting a project:
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). In short:
 
-- **Code** (`clipper` CLI + Postgres + a Render cron running `clipper sync`): Content Rewards parsing, footage listing, OpusClip submit/poll with idempotency and a credit budget, objective checks, caption validation, packaging to R2, notifications, the audit log.
-- **Claude operator** (Claude Code Routine following `.claude/skills/clipper-operator/`): scouting, brief reading, config drafting, footage selection, candidate pre-screen, caption drafting, Needs Attention triage.
+- **Code** (`clipper` CLI + Postgres): Content Rewards parsing, footage listing, the credit ledger that must approve every OpusClip submission (enforced by a hook), objective checks, caption validation, packaging to R2, notifications, the audit log.
+- **Claude operator** (Claude Code Routine following `.claude/skills/clipper-operator/`, with the OpusClip connector): scouting, brief reading, config drafting, footage selection, submitting to OpusClip and collecting clips, transcript-based pre-screen, caption drafting, reviewer-requested clip fixes, Needs Attention triage.
 - **You** (review web app): join campaigns, confirm configs, approve clips, post, record results.
 
 ---

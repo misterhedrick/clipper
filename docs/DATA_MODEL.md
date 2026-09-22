@@ -164,6 +164,8 @@ Unique: `(campaign_id, url)`.
 - Add `footage_source_id uuid` fk (nullable: a file can be selected directly).
 - Add `decision text not null`: `selected \| skipped`, with `decision_reason text not null` and `decided_by text not null`. Skipped files get a row too, so later runs don't re-evaluate them. Only `selected` rows move past `detected`.
 - Rename `drive_file_name` → `source_name`. Add `source_path` (folder path within the source).
+- Add `submit_params jsonb`: the exact parameters `clipper source reserve` issued for the connector call. The submit guard hook compares the real call against this.
+- Add `opusclip_stage text`: last project stage seen via `opusclip_list_clips`.
 - Unique: `(campaign_id, source_key)` replaces `(campaign_id, drive_file_id)`.
 
 ### `candidate_clips`: add
@@ -171,20 +173,38 @@ Unique: `(campaign_id, url)`.
 | Column | Type | Notes |
 |---|---|---|
 | `opusclip_score` | numeric | |
+| `opusclip_sub_scores` | jsonb | hook / coherence / connection / trend, when present |
+| `thumbnail_url` | text | From `opusclip_list_clips` |
 | `description` | text | From OpusClip |
 | `prescreen_verdict` | text | `recommend \| hold \| reject`. Advisory only. |
 | `prescreen_notes` | text | |
 | `prescreened_at` | timestamptz | |
 | `caption` | text | Validated against campaign requirements before it's stored |
+| `review_notes` | text | Reviewer notes from the web app (what to fix when `needs_edit`) |
+| `edit_log` | jsonb | Connector edits applied: `[{ops, reason, at}]` |
 
 ### `credit_ledger` (new)
 
+One row per credit reservation made by `clipper source reserve`.
+
 | Column | Type | Notes |
 |---|---|---|
-| `source_job_id` | uuid not null unique, fk | One reservation per job; the unique key makes a retry reuse it |
+| `source_job_id` | uuid not null, fk | |
 | `campaign_id` | uuid not null, fk | |
-| `credits_reserved` | int not null | Estimate at submit (≥ 10, OpusClip's minimum) |
-| `credits_actual` | int | Filled in when known |
-| `reserved_at` | timestamptz not null | Daily budget sums rows where `reserved_at` is today (UTC) |
+| `credits_reserved` | int not null | Estimate: range length, `--estimated-minutes`, or the 90-minute default (≈1 credit/min) |
+| `status` | text not null | `open \| consumed \| released`. `open` on reserve, `consumed` on `record-project`, `released` on `record-failure` |
+| `reserved_at` | timestamptz not null | Daily budget sums `open` + `consumed` rows reserved today (UTC) |
+| `closed_at` | timestamptz | |
 
-The reservation insert and the budget check happen in one transaction with `SELECT … FOR UPDATE` on a per-day budget row, so two concurrent submits can't both pass the check.
+Partial unique index on `(source_job_id) where status = 'open'`: at most one open reservation per job. The budget check and insert run in one transaction with `SELECT … FOR UPDATE` on a per-day budget row, so two concurrent reservations can't both pass.
+
+### `opus_usage_snapshots` (new)
+
+| Column | Type | Notes |
+|---|---|---|
+| `used` | int not null | `monthly.used` from `opusclip_get_usage` |
+| `limit` | int not null | `monthly.limit` (900 on Pro as of 2026-09-22) |
+| `reset_at` | timestamptz not null | |
+| `recorded_by` | text not null | |
+
+Written by `clipper credits reconcile`. `clipper credits` compares the ledger with the latest snapshot, so drift between our estimates and OpusClip's real billing is visible.

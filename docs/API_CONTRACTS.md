@@ -109,7 +109,32 @@ Use option 1. Each returned file's `id` is the `drive_file_id` used for dedupe i
 
 ---
 
-## OpusClip API
+## OpusClip connector (MCP): how the operator uses OpusClip
+
+Verified 2026-09-22 on the connected account: plan **PRO**, `has_api_access: true`, monthly cap **900 credits** (`enforced: false`, so our ledger is the real limit), **10** concurrent projects. Brand templates: `Preset template 1` (default, portrait) and `MW4` (portrait). No social accounts connected.
+
+Tools the operator uses (names as exposed in Claude Code: `mcp__OpusClip__<tool>`):
+
+| Tool | Used for | Notes |
+|---|---|---|
+| `opusclip_get_usage` | headroom before `reserve`, `credits reconcile` | `monthly {used, limit, remaining, reset_at}`, `concurrent {used, limit}` |
+| `opusclip_submit_project` | create a project | **Only** with `submitParams` from `clipper source reserve`; guarded by a PreToolUse hook. Params: `videoUrl`, `aspectRatio` (`portrait\|square\|landscape\|four_five`), `brandTemplateId`, `clipDurationsSec` (`[[min,max],…]`), `rangeStart`/`rangeEnd` (seconds; only the range is billed), `title`, `customPrompt`, `genre`, `enableCaption`, `sourceLang` |
+| `opusclip_list_projects` | crash recovery: find `clipper:<jobId>` | |
+| `opusclip_list_clips` | collect candidates | rank, score, sub-scores, title, description, hashtags, duration, preview + **thumbnail** URLs, and the project `stage` (empty list + in-progress stage = not ready yet) |
+| `opusclip_describe_clip` | pre-screen | the clip's transcript, keywords, layout, `render_pending` |
+| `opusclip_get_transcript` | pre-screen, source-level | per-word timings for the whole source |
+| `opusclip_analyze_video` | layout-dependent brief rules | async: start, then poll with `taskId` alone |
+| `opusclip_edit_clip` | reviewer-requested fixes | `dryRun` first; ops include `delete_phrase`, `replace_phrase`, `trim_section`, `remove_pauses`, `remove_filler_words`, `add_text_overlay`, `set_style` |
+| `opusclip_export_clip` | HD URL for approved clips | `rendering` → call again; `ready` → `export_url`; `unavailable` is final |
+| `opusclip_preview_clips` | show clips in chat | |
+| `opusclip_list_brand_templates` | config drafting | |
+| `opusclip_create_upload_link` | footage from unsupported hosts, supplied by a person | returns a signed upload URL; pass the `upload_id` as `videoUrl` |
+
+**Denied in `.claude/settings.json`:** `opusclip_create_post_task`, `opusclip_schedule_publish`, `opusclip_unschedule_publish`, `opusclip_share_project`. v1 doesn't post or share through OpusClip.
+
+The raw HTTP API below is kept for reference and as the fallback for a cron poller (`ARCHITECTURE.md` § Runtime shape). The operator doesn't call it.
+
+## OpusClip API (reference / fallback)
 
 Base URL: `https://api.opus.pro`. Auth: `Authorization: Bearer {OPUSCLIP_API_KEY}` header on every request; add `x-opus-org-id` if the account belongs to multiple orgs.
 

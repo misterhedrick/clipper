@@ -9,9 +9,16 @@ Goal: every `needs_attention`, `validation_failed` and `submit_failed` item ends
 | `guideline_doc_not_public`, folder asks for sign-in | Nothing you can fix. Report it: "Brief for <campaign> isn't public. Ask the campaign owner in their Discord, or skip the campaign." |
 | Unsupported footage host (Kick, MediaSilo, portal) | Report the link. The fix is a person downloading and re-sharing, or skipping. |
 | `unsupported_extension`, file too large/long | Confirm the file really isn't usable. `footage skip` it with the reason so it isn't re-selected. |
-| Drive quota / "too many users" / timeout | Transient. The job retries automatically on the next `sync` up to its retry limit. Only report it if the retry count is exhausted. |
+| Drive quota / "too many users" / timeout | Transient. `record-failure` already put the job back in `queued`; it gets reserved again on a later run, up to 3 tries, then lands here. Only report it once retries are exhausted. |
 | OpusClip rejected the URL | Check the URL form matches the kind table in `docs/ARCHITECTURE.md`. If it's a code bug, say so and include the error. Don't resubmit by hand. |
-| Insufficient credits | Report it. Don't retry. |
+| Insufficient credits, or `reserve` refused for budget | Report it with the `clipper credits` numbers. Don't retry. |
+| Hook blocked a submit | Something differed from the reservation. Report exactly what, and don't retry with edited parameters. |
 | Campaign ended or paused on Content Rewards | Report it and suggest pausing the campaign here. |
+
+**Jobs stuck in `submitting`** (a run ended between reserve and record). For each: `opusclip_list_projects` and look for the title `clipper:<jobId>`.
+- Found → `clipper source record-project <jobId> --project-id <id>`. The submission happened; this just records it.
+- Not found → `clipper source record-failure <jobId> --error "no project found after interrupted submit"`. The reservation is released and the job can be reserved again.
+
+Do this before any submitting in the run.
 
 If the same reason appears on many items, report it once as a pattern with the count, not one line per item.
