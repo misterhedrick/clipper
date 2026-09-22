@@ -2,37 +2,38 @@
   "name": "clipper",
   "version": "0.1.0",
   "private": true,
+  "description": "Campaign-neutral clip automation platform: Content Rewards campaigns -> OpusClip candidates -> human review -> Ready to Post.",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "start:api": "node dist/apiMain.js",
-    "start:worker": "node dist/workerMain.js",
-    "dev:api": "tsx src/apiMain.ts",
-    "dev:worker": "tsx src/workerMain.ts",
-    "migrate": "node-pg-migrate up -m src/db/migrations",
-    "migrate:down": "node-pg-migrate down -m src/db/migrations",
-    "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "dev:api": "tsx watch src/server.ts",
+    "start:api": "node dist/server.js",
+    "db:generate": "drizzle-kit generate",
+    "migrate": "node dist/db/migrate.js",
+    "migrate:dev": "tsx src/db/migrate.ts",
+    "test": "vitest run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/misterhedrick/clipper.git"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
-    "@aws-sdk/client-s3": "^3.699.0",
-    "@aws-sdk/lib-storage": "^3.1134.0",
-    "dotenv": "^16.4.5",
-    "fastify": "^5.1.0",
-    "pg": "^8.13.1",
-    "pg-boss": "^10.1.5",
-    "zod": "^3.23.8"
+    "dotenv": "^18.0.3",
+    "drizzle-orm": "^0.45.3",
+    "fastify": "^5.12.5",
+    "pg": "^8.23.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@types/node": "^22.9.0",
-    "@types/pg": "^8.11.10",
-    "node-pg-migrate": "^7.9.1",
-    "tsx": "^4.19.2",
-    "typescript": "^5.6.3",
-    "vitest": "^2.1.5"
+    "@types/node": "^26.6.2",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.11",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
   }
 }

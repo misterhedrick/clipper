@@ -14,7 +14,8 @@ PostgreSQL schema. Every table has `id uuid primary key default gen_random_uuid(
 | `guideline_doc_url` | text | |
 | `drive_folder_url` | text | |
 | `drive_folder_id` | text | Extracted from the URL, used by `footage-enumerator`. |
-| `status` | text not null | `discovered \| ingesting \| requirements_drafted \| pending_confirmation \| active \| paused \| archived` |
+| `status` | text not null | `discovered \| ingesting \| requirements_drafted \| pending_confirmation \| active \| paused \| archived \| needs_attention` (`needs_attention` is used by `BUILD_PLAN.md` task 4, e.g. `guideline_doc_not_public`) |
+| `status_reason` | text | Human-readable reason for the current status, e.g. why the campaign is in `needs_attention`. |
 | `config` | jsonb not null default '{}' | The full `CampaignConfig` object — see shape below. |
 | `config_confirmed_at` | timestamptz | Null until a human confirms. |
 | `config_confirmed_by` | text | Reviewer identifier. |
@@ -44,7 +45,7 @@ type CampaignConfig = {
     autoApprove: false; // literal type — this must never be true in v1
   };
   extraction: {
-    // one entry per field above that the requirements-extractor populated
+    // one entry per field above that Claude filled in while reading the brief
     fieldConfidence: Record<string, "high" | "low">;
     unresolvedFields: string[];
   };
@@ -112,9 +113,78 @@ Manual-posting tracking (README § "Post manually in version one").
 | `earnings` | numeric | |
 | `notes` | text | |
 
+## Constraints enforced in the database
+
+- Every `status` column (and `status_events.entity_type`, `posts.platform`) has a `CHECK` constraint limiting it to the values listed above, so a typo in application code fails loudly.
+- `source_jobs`: `status_reason` must be non-null when `status` is `validation_failed`, `submit_failed`, or `needs_attention`.
+
+The schema source of truth is `src/db/schema.ts` (Drizzle); migrations in `src/db/migrations/` are generated from it with `npm run db:generate`, never hand-edited.
+
 ## Indexes to create explicitly
 
 - `source_jobs (campaign_id, drive_file_id)` — unique, dedupe.
 - `source_jobs (status)` — the job queue and Needs Attention alerts scan by status.
 - `candidate_clips (status)` — the review queue scans by status.
+- `campaigns (status)` — the enumerator polls only `active` campaigns.
 - `status_events (entity_type, entity_id)` — audit lookups per entity.
+
+## v2 changes (BUILD_PLAN task 3, not yet migrated)
+
+These come from the Claude-operator design (`ARCHITECTURE.md`) and the finding that footage comes from many hosts, not just Drive (`CAMPAIGN_SURVEY.md`).
+
+### `campaigns`: add
+
+| Column | Type | Notes |
+|---|---|---|
+| `campaign_type` | text | `lf \| ugc \| music \| slideshow \| unclear`, set by `campaign classify`. Only `lf` campaigns can be confirmed. |
+| `campaign_type_reason` | text | |
+| `max_daily_credits` | int | Per-campaign cap. Null = only the global budget applies. |
+
+Drop `drive_folder_url` / `drive_folder_id`; footage locations move to `footage_sources`.
+
+### `footage_sources` (new)
+
+One row per footage *location* registered for a campaign (a Drive folder, a YouTube channel, a single file link).
+
+| Column | Type | Notes |
+|---|---|---|
+| `campaign_id` | uuid not null, fk | |
+| `kind` | text not null | `gdrive_folder \| gdrive_file \| youtube_channel \| youtube_video \| s3_mp4 \| dropbox \| frameio \| loom \| vimeo \| twitch` |
+| `url` | text not null | As found in the brief |
+| `label` | text | e.g. "Raw to edit, full podcast episodes" |
+| `added_by` | text not null | `claude-operator` or a reviewer |
+| `reason` | text not null | Where in the brief, and why it's footage |
+| `last_listed_at` | timestamptz | When `list-url` last expanded it |
+
+Unique: `(campaign_id, url)`.
+
+### `source_jobs`: change
+
+- Replace `drive_file_id` with `source_key text not null` (e.g. `gdrive:{fileId}`, `youtube:{videoId}`; see `ARCHITECTURE.md` § "Footage source kinds") and `source_kind text not null`.
+- Add `footage_source_id uuid` fk (nullable: a file can be selected directly).
+- Add `decision text not null`: `selected \| skipped`, with `decision_reason text not null` and `decided_by text not null`. Skipped files get a row too, so later runs don't re-evaluate them. Only `selected` rows move past `detected`.
+- Rename `drive_file_name` → `source_name`. Add `source_path` (folder path within the source).
+- Unique: `(campaign_id, source_key)` replaces `(campaign_id, drive_file_id)`.
+
+### `candidate_clips`: add
+
+| Column | Type | Notes |
+|---|---|---|
+| `opusclip_score` | numeric | |
+| `description` | text | From OpusClip |
+| `prescreen_verdict` | text | `recommend \| hold \| reject`. Advisory only. |
+| `prescreen_notes` | text | |
+| `prescreened_at` | timestamptz | |
+| `caption` | text | Validated against campaign requirements before it's stored |
+
+### `credit_ledger` (new)
+
+| Column | Type | Notes |
+|---|---|---|
+| `source_job_id` | uuid not null unique, fk | One reservation per job; the unique key makes a retry reuse it |
+| `campaign_id` | uuid not null, fk | |
+| `credits_reserved` | int not null | Estimate at submit (≥ 10, OpusClip's minimum) |
+| `credits_actual` | int | Filled in when known |
+| `reserved_at` | timestamptz not null | Daily budget sums rows where `reserved_at` is today (UTC) |
+
+The reservation insert and the budget check happen in one transaction with `SELECT … FOR UPDATE` on a per-day budget row, so two concurrent submits can't both pass the check.

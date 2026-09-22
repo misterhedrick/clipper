@@ -1,84 +1,85 @@
 # Build Plan
 
-Ordered task list for Phase 1 (README § Recommended Build Phases). Each task lists its dependencies and a concrete "done when" check — build and verify in this order; later tasks assume earlier ones work.
+Ordered Phase 1 tasks. Each task has a concrete "done when" check. Build and verify in order, since later tasks assume earlier ones work.
 
-Phases 2-4 are intentionally not broken down to this granularity yet — do that once Phase 1 is live and real campaign data has been run through it, since Phase 2+ priorities should be informed by what Phase 1 actually surfaces as painful.
+Revised 2026-09-22 for the Claude-operator design (`ARCHITECTURE.md`). The original tasks 3–14 assumed Drive-only footage, a code-based LLM extractor and a queue worker. The survey (`CAMPAIGN_SURVEY.md`) showed none of that fits. Tasks 0–2 are unchanged and done.
 
-## 0. Project scaffold
-- Repo layout per `ARCHITECTURE.md`.
-- `config.ts` loads and validates required env vars at boot, fails fast (not at first use) if any are missing: `DATABASE_URL`, `OPUSCLIP_API_KEY`, `GOOGLE_API_KEY` (Drive), `ANTHROPIC_API_KEY` (requirements extraction), `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` (export storage), `NOTIFY_WEBHOOK_URL` (or email creds — pick one channel for v1).
-- **Done when:** app boots locally against a local Postgres with no code beyond config loading and a health-check route.
+An earlier, separate Phase 1 build on the old design (commit `c55ad2e`: Drive-only, pg-boss worker, in-app Claude API call) was merged into `develop` with this design taking precedence. Its code is no longer in the tree. The tasks below name the pieces worth porting from it.
 
-## 1. Database
-- Implement schema from `DATA_MODEL.md` as migrations.
-- **Done when:** migrations run clean on an empty DB, and a manual insert/select round-trips through each table including the unique `(campaign_id, drive_file_id)` constraint (write a test that inserts a duplicate and asserts it's rejected).
+## 0. Project scaffold ✅ done
+Fastify app, zod-validated config that fails at boot, `GET /health` backed by a real DB query.
 
-## 2. `campaign-connector`
-- Implement URL → campaign ID resolution (direct `/discover/{id}` parse, and the `/campaigns/{id}` → 308 redirect fallback).
-- Implement discover-page JSON extraction per `API_CONTRACTS.md`.
-- Implement individual campaign page fetch for `guidelineDocUrl` / `driveFolderUrl`.
-- **Done when:** given the real MW4 campaign URL used during planning (`https://contentrewards.com/discover/24ad920b-d24f-479e-9cef-f22182e4a0c0`), the module returns title, brand, platforms, and payout data correctly (verified — see `docs/API_CONTRACTS.md`), plus the guideline doc URL; `driveFolderUrl` is legitimately `null` for this specific campaign, so don't assert it's populated for this one — assert it against the ForgeGUI campaign (`1db63081-715e-4e04-9b11-fbc1d4e8e700`) instead, which does expose one. Write this as an integration test (network-dependent, can be skipped in CI but must be runnable manually) — if Content Rewards changes markup, this is the test that catches it.
+## 1. Database ✅ done
+Drizzle schema + migrations for `campaigns`, `source_jobs`, `candidate_clips`, `status_events`, `posts`, with DB-enforced dedupe and status vocabularies.
 
-## 3. Campaign registration flow (minimal `review-api`)
-- One endpoint: `POST /campaigns { contentRewardsUrl }` → runs `campaign-connector`, inserts a `campaigns` row with `status = ingesting`, then `discovered`/`requirements_drafted` as steps complete.
-- **Done when:** posting a real campaign URL produces a `campaigns` row with metadata populated and `guideline_doc_url`/`drive_folder_url` set.
+## 2. `campaign-connector` ✅ done
+Content Rewards URL → metadata + reference materials. Live canary test: `RUN_NETWORK_TESTS=1 npm test -- live`.
 
-## 4. `requirements-extractor`
-- Fetch guideline doc text (`export?format=txt`); if it 302s to a Google login page, set campaign status to `needs_attention` with reason `guideline_doc_not_public` and stop — do not proceed.
-- One Claude API call with a strict JSON schema matching `CampaignConfig.requirements` + `clipGeneration`, asking the model to also emit a per-field confidence and a list of fields it couldn't find.
-- Write the result into `campaigns.config`, set `status = pending_confirmation`.
-- **Done when:** run against a real (public) guideline doc, the output has every schema field present (null where genuinely unknown) and low-confidence fields flagged rather than guessed.
+## 3. Schema v2 + config cleanup
+- Migration per `DATA_MODEL.md` § "v2 changes": `campaigns.campaign_type`, `footage_sources` table, `source_jobs.source_key`/`source_kind` (replacing `drive_file_id`), candidate `prescreen_*` and `caption` columns, `credit_ledger`.
+- Drop `ANTHROPIC_API_KEY` and `GOOGLE_API_KEY` from required config (the app makes no LLM calls, and Drive listing is keyless). Add `OPUSCLIP_DAILY_CREDIT_BUDGET` and `REVIEWER_TOKEN`.
+- A single `transition()` helper per entity: updates status and inserts `status_events` in one transaction. Nothing else writes a `status` column.
+- **Done when:** migrations apply on top of v1. The duplicate `(campaign_id, source_key)` test passes. A test proves `transition()` writes the audit row atomically: a forced failure after the update leaves neither the update nor the event.
 
-## 5. Confirmation endpoint
-- `POST /campaigns/{id}/confirm { config, confirmedBy }` — accepts a human-edited version of the draft config, sets `status = active`, `config_confirmed_at`, `config_confirmed_by`.
-- Reject confirmation if `review.autoApprove` is anything but `false` — this is a hard invariant per README non-goals, enforce it in code, not just convention.
-- **Done when:** a campaign only reaches `active` through this endpoint; there is no code path that sets `status = active` any other way (grep the codebase for `'active'` assignments as a review step).
+## 4. CLI skeleton + campaign commands
+- `clipper` bin: JSON on stdout, `{error:{code,message}}` + non-zero exit on failure, `actor = 'claude-operator'` on every write.
+- `campaign scout | add | show | list | classify | flag`.
+- `scout` parses the discover listing page (same RSC approach as `campaign-connector`; the listing has better `description` data).
+- **Done when:** `clipper campaign add <MW4 url>` creates a row, a second `add` is a no-op returning the same ID, and `scout` lists ~50 campaigns with titles and platforms (network test).
 
-## 6. `footage-enumerator`
-- List files in the campaign's Drive folder via Drive API v3 + API key.
-- Diff against existing `source_jobs.drive_file_id` for the campaign; insert one `source_jobs` row (`status = detected`) per unseen file.
-- Run on a poll interval (job in the queue, not a cron hack) — only for campaigns with `status = active`.
-- **Done when:** running it twice against the same folder produces zero duplicate `source_jobs` rows the second time; adding a new file to the test folder and re-running produces exactly one new row.
+## 5. `brief-reader` + `campaign brief`
+- Fetch the doc as `export?format=html`. Return the plain text **and** every hyperlink, unwrapping `google.com/url?q=` redirects. `--doc <url>` reads a linked sub-doc.
+- A 401 or redirect to sign-in → `{error:{code:"not_public"}}`, never retried.
+- **Done when:** for survey campaigns #25 (PULP) and #39 (Ryan Zofay), the output includes the Drive folder links that plain-text export drops.
 
-## 7. Source validation
-- Implement the checklist from README § "Validate the source": file type, campaign active, not a dup (already covered by #6's constraint), size/duration limits, pre-flight reachability (HEAD request on the Drive share URL).
-- On failure: `status = validation_failed`, `status_reason` set, `notifier` fires.
-- **Done when:** an oversized or wrong-extension file is rejected with a specific reason; a valid file proceeds to `queued`.
+## 6. Campaign config schema + `propose-config`
+- zod `CampaignConfig` (per `DATA_MODEL.md`), with `review.autoApprove` as `z.literal(false)`.
+- `propose-config` validates, stores and moves to `pending_confirmation`. It **cannot** move to `active`.
+- **Done when:** an invalid config is rejected with field-level errors; `autoApprove: true` is rejected; grepping `src/cli` finds no path that sets `active`.
 
-## 8. `project-creator`
-- Submit `POST /api/clip-projects` per `API_CONTRACTS.md`, using the campaign's confirmed `config` to fill `brandTemplateId`, `curationPref`, `renderPref`.
-- Persist `opusclip_project_id` immediately on a successful response, before returning from the handler.
-- Classify failures per the retry table in README § Retry policy; permanent failures go to `submit_failed` + `needs_attention`.
-- **Done when:** a real (small, short) public test video submits successfully and `source_jobs.opusclip_project_id` is populated; a deliberately-broken URL produces a classified failure, not an unhandled exception.
+## 7. `footage-sources` + footage commands
+- URL → kind classifier for every row in `ARCHITECTURE.md` § "Footage source kinds".
+- Drive folder listing via `embeddedfolderview` (recursive, depth-limited, with folder path per file). YouTube channel → channel ID → RSS feed.
+- `footage add | list-url | select | skip`. `select` creates a `source_jobs` row (`detected`); `skip` records a decision so later runs don't re-evaluate.
+- **Done when:** `list-url` on survey folders #46 (Nilo, 7 subfolders) and #23 (Charlie Berens, 2 MP4s) returns the right structure. Running `select` twice on the same file creates one job.
+- **Open item:** Dropbox shared-folder listing. Try the `?dl=0` HTML listing first. If that isn't feasible, Dropbox folders are human-picked file links for v1.
 
-## 9. `project-monitor`
-- Polling worker: for every `source_job` with `status = project_created` or `processing`, call `GET /api/exportable-clips`, upsert into `candidate_clips`.
-- Webhook receiver route: on receipt, trigger the same poll for the referenced project (don't trust webhook body fields directly — see `API_CONTRACTS.md`).
-- **Done when:** candidates appear in `candidate_clips` for a real submitted project, purely from polling (test with the webhook disabled first, to prove the fallback path works standalone).
+## 8. OpusClip client + `source validate | submit` + `credits`
+- Typed client for create-project and get-clips (`API_CONTRACTS.md`). Add a rate limiter (30/min).
+- `submit`: atomic credit reservation in `credit_ledger` against the daily and per-campaign budget, `submitting` lock state, persist `opusclip_project_id` before returning.
+- Failure classification per README § Retry policy.
+- **Done when:** a short public test video submits and gets a project ID. A second `submit` on the same job returns the same project with no API call. Exceeding the budget is refused before any API call.
+- **Port, don't rewrite:** `src/lib/opusclip.ts` and `src/modules/project-creator/validateSource.ts` from the earlier Phase 1 build (commit `c55ad2e`, in `develop`'s history). They already have a typed client with retryable/permanent error classification. Adapt them to the v2 schema and the credit ledger.
 
-## 10. `compliance-service`
-- Implement the objective checks from README § "Run automated checks" against `candidate_clips` + the campaign's `config`.
-- Write results into `candidate_clips.check_results`; anything not objectively verifiable is `manual_review_required`, never `pass`.
-- **Done when:** a clip with wrong aspect ratio is flagged `fail` on that check; a clip meeting all objective criteria but with unverifiable overlay requirements shows `manual_review_required` for that check, not `pass`.
+## 9. `clipper sync`
+- Poll `project_created`/`processing` jobs → upsert candidates → run objective checks (`compliance`) → `awaiting_review`. Retry transient failures with backoff and a max count.
+- **Done when:** candidates appear for the task-8 project from polling alone, and a re-run creates no duplicates.
+- **Port:** `src/modules/compliance-service/` and its tests from `c55ad2e`. Its objective checks already default unverifiable checks to `manual_review_required`.
 
-## 11. Review queue + decision endpoints
-- `GET /candidates?status=awaiting_review` (filterable by campaign).
-- `POST /candidates/{id}/decision { decision: approve|needs_edit|reject|hold, reviewer, notes }`.
-- Every decision writes a `status_events` row.
-- **Done when:** approving a candidate moves it to `approved` and triggers task #12; rejecting records a reason and the clip never resurfaces in the queue.
+## 10. Caption validation + `candidate prescreen | set-caption`
+- `compliance.validateCaption(caption, config)`: exact-match required lines, required tags, disclosures (on their own line when required), hashtag limit.
+- **Done when:** the MW4 caption rules (exact pre-order phrase, `@callofduty`, `#Ad` on its own line) accept a compliant caption and reject each single omission with a specific reason.
 
-## 12. Export + Ready to Post packaging
-- On approval: fetch `uriForExport` (poll if not yet populated), write the package structure from README § "Prepare approved clips" to the platform's own storage, create the caption file from `config.requirements`.
-- **Done when:** an approved candidate produces a `final.mp4` + `caption.txt` + `clip-metadata.json` + `thumbnail.jpg` bundle and a `posts`-ready tracker entry.
+## 11. Review web app
+- Server-rendered pages on the existing Fastify app, behind `REVIEWER_TOKEN` for v1: campaigns awaiting confirmation (edit + confirm → `active`), candidate queue with preview video, checks, prescreen notes and caption (approve / needs edit / reject / hold), post recording.
+- **Done when:** approve is only reachable through an authenticated request, and every decision writes a `status_events` row with the reviewer as actor.
 
-## 13. `notifier`
-- Wire actual delivery (email or Slack — pick one) for: any `needs_attention` transition, and campaigns sitting in `pending_confirmation` past a configurable threshold (e.g. 24h).
-- **Done when:** triggering a validation failure in a test actually produces a delivered notification, not just a log line.
+## 12. Packaging + notifier
+- On approval: fetch `uriForExport` (poll if not ready), write `final.mp4`, `caption.txt`, `clip-metadata.json` and `thumbnail.jpg` to R2 → `ready_to_post`.
+- `notifier` webhook for `needs_attention`, configs waiting over 24h, and operator reports (`clipper notify`).
+- **Done when:** an approved candidate produces the full bundle in R2, and a forced validation failure delivers a real notification.
+- **Port:** `src/lib/r2.ts` (streaming multipart upload, never buffers the file), `src/modules/export/` and `src/modules/notifier/` from `c55ad2e`.
+- **Known gap from that build:** OpusClip's get-clips response has no thumbnail field. Confirm whether one exists before building `thumbnail.jpg`; otherwise ship the bundle without it and say so, rather than faking one.
 
-## 14. End-to-end smoke test
-- Register a real campaign → confirm requirements → let a real footage file flow through to `ready_to_post` → verify every table has consistent, linked rows and every transition has a `status_events` entry.
-- **Done when:** this runs clean twice in a row against the same campaign without creating any duplicate `source_jobs` or `candidate_clips` rows on the second run (idempotency check).
+## 13. Operator deployment
+- Render: web service + Render Cron Job (`clipper sync` every 10 min). No background worker.
+- Claude Code Routine on this repo, running the `clipper-operator` skill a few times a day, with `DATABASE_URL`, `OPUSCLIP_API_KEY`, `OPUSCLIP_DAILY_CREDIT_BUDGET` and `NOTIFY_WEBHOOK_URL` in its environment.
+- **Done when:** a scheduled run completes the loop on an empty queue and posts a "nothing needs you" report.
+
+## 14. End-to-end on a real campaign
+- Pick an LF campaign with a public Drive folder of full-length footage (survey #23 Charlie Berens is a good candidate). Scout → add → onboard → confirm → source → submit → sync → pre-screen → approve → Ready to Post.
+- **Done when:** it runs clean twice with no duplicate jobs or candidates on the second pass, and every transition has a `status_events` row.
 
 ---
 
-Do not start Phase 2 work (dashboard, webhook-first monitoring, richer compliance) until task 14 passes against a real Content Rewards campaign end to end.
+Don't start Phase 2 (richer review UI, webhook-driven sync, performance tracking) until task 14 passes on a real campaign.

@@ -1,0 +1,28 @@
+# Clipper
+
+A clip-automation pipeline: Content Rewards campaigns → footage → OpusClip → human review → Ready to Post. Read `README.md` (spec) and `docs/ARCHITECTURE.md` (design) before changing anything.
+
+## Two modes of working in this repo
+
+- **Developing the platform:** follow `docs/BUILD_PLAN.md` in order. Each task has a "done when" check; verify it before moving on.
+- **Operating the pipeline** ("do an operator run", "scout campaigns", "onboard this campaign"): use the `clipper-operator` skill in `.claude/skills/`. In this mode you only act through the `clipper` CLI.
+
+## The split to preserve
+
+Code guards state (dedupe, credit budget, caption validation, the approval gate). Claude does reading and judgment through the playbook. People approve, join and post. Never add a CLI command that approves clips, activates campaigns, joins campaigns or posts.
+
+## Commands
+
+```bash
+npm test                                   # unit + DB tests (DB tests need TEST_DATABASE_URL; they wipe that DB)
+RUN_NETWORK_TESTS=1 npm test -- live       # live Content Rewards canary
+npm run typecheck && npm run build
+npm run db:generate                        # after editing src/db/schema.ts; never hand-edit migrations
+```
+
+## Conventions
+
+- TypeScript ESM, strict. zod at every boundary with external data.
+- Each module lives in `src/modules/<name>/` and is used through its exported functions only.
+- Content Rewards parsing is reverse-engineered: keep it inside `campaign-connector`, and update `docs/API_CONTRACTS.md` when it changes.
+- Status changes go through the entity's `transition()` helper so the `status_events` audit row is written in the same transaction.
