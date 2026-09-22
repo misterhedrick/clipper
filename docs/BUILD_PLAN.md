@@ -4,12 +4,12 @@ Ordered task list for Phase 1 (README § Recommended Build Phases). Each task li
 
 Phases 2-4 are intentionally not broken down to this granularity yet — do that once Phase 1 is live and real campaign data has been run through it, since Phase 2+ priorities should be informed by what Phase 1 actually surfaces as painful.
 
-## 0. Project scaffold
+## 0. Project scaffold ✅ done
 - Repo layout per `ARCHITECTURE.md`.
 - `config.ts` loads and validates required env vars at boot, fails fast (not at first use) if any are missing: `DATABASE_URL`, `OPUSCLIP_API_KEY`, `GOOGLE_API_KEY` (Drive), `ANTHROPIC_API_KEY` (requirements extraction), `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` (export storage), `NOTIFY_WEBHOOK_URL` (or email creds — pick one channel for v1).
 - **Done when:** app boots locally against a local Postgres with no code beyond config loading and a health-check route.
 
-## 1. Database
+## 1. Database ✅ done
 - Implement schema from `DATA_MODEL.md` as migrations.
 - **Done when:** migrations run clean on an empty DB, and a manual insert/select round-trips through each table including the unique `(campaign_id, drive_file_id)` constraint (write a test that inserts a duplicate and asserts it's rejected).
 

@@ -18,6 +18,20 @@ The system must remove repeated manual work — reading briefs, downloading foot
 
 Build in the order `BUILD_PLAN.md` lays out — later tasks assume earlier ones already work.
 
+## Local development
+
+Requires Node 22+ and a local Postgres.
+
+```bash
+npm install
+cp .env.example .env          # fill in secrets; DATABASE_URL / TEST_DATABASE_URL point at local Postgres
+npm run migrate:dev           # apply migrations to DATABASE_URL
+npm test                      # DB tests run against TEST_DATABASE_URL (wiped on each run) and are skipped if it's unset
+npm run dev:api               # Fastify on PORT, GET /health
+```
+
+Schema changes: edit `src/db/schema.ts`, then `npm run db:generate` to produce a new migration.
+
 ## Core Principles
 
 - **Campaign-neutral:** No game, brand, platform, caption, or watermark is hard-coded.

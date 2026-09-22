@@ -14,7 +14,8 @@ PostgreSQL schema. Every table has `id uuid primary key default gen_random_uuid(
 | `guideline_doc_url` | text | |
 | `drive_folder_url` | text | |
 | `drive_folder_id` | text | Extracted from the URL, used by `footage-enumerator`. |
-| `status` | text not null | `discovered \| ingesting \| requirements_drafted \| pending_confirmation \| active \| paused \| archived` |
+| `status` | text not null | `discovered \| ingesting \| requirements_drafted \| pending_confirmation \| active \| paused \| archived \| needs_attention` (`needs_attention` is used by `BUILD_PLAN.md` task 4, e.g. `guideline_doc_not_public`) |
+| `status_reason` | text | Human-readable reason for the current status, e.g. why the campaign is in `needs_attention`. |
 | `config` | jsonb not null default '{}' | The full `CampaignConfig` object — see shape below. |
 | `config_confirmed_at` | timestamptz | Null until a human confirms. |
 | `config_confirmed_by` | text | Reviewer identifier. |
@@ -112,9 +113,17 @@ Manual-posting tracking (README § "Post manually in version one").
 | `earnings` | numeric | |
 | `notes` | text | |
 
+## Constraints enforced in the database
+
+- Every `status` column (and `status_events.entity_type`, `posts.platform`) has a `CHECK` constraint limiting it to the values listed above, so a typo in application code fails loudly.
+- `source_jobs`: `status_reason` must be non-null when `status` is `validation_failed`, `submit_failed`, or `needs_attention`.
+
+The schema source of truth is `src/db/schema.ts` (Drizzle); migrations in `src/db/migrations/` are generated from it with `npm run db:generate`, never hand-edited.
+
 ## Indexes to create explicitly
 
 - `source_jobs (campaign_id, drive_file_id)` — unique, dedupe.
 - `source_jobs (status)` — the job queue and Needs Attention alerts scan by status.
 - `candidate_clips (status)` — the review queue scans by status.
+- `campaigns (status)` — the enumerator polls only `active` campaigns.
 - `status_events (entity_type, entity_id)` — audit lookups per entity.
