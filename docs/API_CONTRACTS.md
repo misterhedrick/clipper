@@ -84,15 +84,19 @@ There are no dedicated `guidelineDocUrl` / `driveFolderUrl` fields. The connecto
 
 ### Guideline doc (Google Docs)
 
-Fetch the plain text of the doc for the `requirements-extractor`:
+`brief-reader` fetches the doc as HTML, not plain text. The `txt` export drops hyperlinks, and footage folders are often linked from link text (verified in the survey):
 
 ```
-GET https://docs.google.com/document/d/{docId}/export?format=txt
+GET https://docs.google.com/document/d/{docId}/export?format=html
 ```
 
-This only works if the doc is actually public ("anyone with the link can view"). If it 302s to a Google sign-in page instead of returning `text/plain`, treat that as `campaign.status = needs_attention` with reason `guideline_doc_not_public` — per README, never attempt to authenticate around this.
+Hyperlinks come wrapped as `https://www.google.com/url?q=<real url>&...`; unwrap the `q` parameter. A non-public doc returns **401** (observed in the survey); a redirect to `accounts.google.com` means the same thing.
+
+This only works if the doc is actually public ("anyone with the link can view"). If it returns 401 or redirects to sign-in instead of the document, treat that as `campaign.status = needs_attention` with reason `guideline_doc_not_public` — per README, never attempt to authenticate around this.
 
 ### Footage folder (Google Drive)
+
+**Keyless listing (preferred, verified 2026-09-22):** `GET https://drive.google.com/embeddedfolderview?id={folderId}` returns HTML listing the folder's files and subfolders (`flip-entry` elements with titles and IDs) for any link-shared folder, with no API key. Recurse into subfolders. The Drive API option below is a fallback.
 
 Two viable approaches, in preference order:
 

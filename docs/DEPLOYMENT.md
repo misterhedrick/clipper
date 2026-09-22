@@ -4,13 +4,13 @@ This maps the architecture in `ARCHITECTURE.md` onto concrete hosting. Nothing h
 
 ## Services
 
-Three Render resources for compute + database, plus a Cloudflare R2 bucket for file storage:
+Three Render resources for compute + database (plus the Claude operator, which runs as a Claude Code Routine, not on Render; see below), plus a Cloudflare R2 bucket for file storage:
 
 | Resource | Where | Runs | Why |
 |---|---|---|---|
 | **Web Service** | Render | Fastify app: `review-api` HTTP routes + the OpusClip webhook receiver (`server.ts`) | Needs a public HTTPS URL — this is what `conclusionActions` in `API_CONTRACTS.md` points at, and what a human reviewer's browser hits. |
-| **Background Worker** | Render | pg-boss workers: `footage-enumerator` polling, `project-creator`, `project-monitor` polling, `notifier` | Long-running queue consumers with no HTTP surface — a Render *Background Worker*, not a Web Service, so it isn't exposed and isn't subject to the web service's idle/cold-start behavior. |
-| **PostgreSQL** | Render | The `tracker` database from `DATA_MODEL.md`, and doubles as the pg-boss job store | A plain managed Postgres instance — not forced through a transaction-mode pooler — so `pg-boss` works without any session-state caveats, and database + compute share one platform/bill. |
+| **Cron Job** | Render | `clipper sync` every 10 minutes: poll OpusClip, upsert candidates, run checks, package approvals, send notifications | Deterministic and short-lived, so there's no need for a long-running worker. (Replaces the earlier pg-boss Background Worker; see `ARCHITECTURE.md`.) |
+| **PostgreSQL** | Render | The `tracker` database from `DATA_MODEL.md`; status columns double as the work queue | A plain managed instance, not behind a transaction-mode pooler, so `SELECT … FOR UPDATE` credit reservations behave normally. Database and compute share one platform and bill. |
 | **R2 bucket** | Cloudflare | `Ready to Post` / `Archive` / `Needs Attention` export bundles (`final.mp4`, `thumbnail.jpg`, `caption.txt`, `clip-metadata.json`) | S3-API-compatible, zero egress fees for the reviewer/poster downloads that happen on every approved clip. |
 
 ## `render.yaml` sketch
@@ -52,17 +52,22 @@ services:
       - key: NOTIFY_WEBHOOK_URL
         sync: false
 
-  - type: worker
-    name: clipper-worker
+  - type: cron
+    name: clipper-sync
     runtime: node
     plan: starter
+    schedule: "*/10 * * * *"
     buildCommand: npm ci && npm run build
-    startCommand: npm run start:worker
+    startCommand: npm run sync
     envVars:
       - key: DATABASE_URL
         fromDatabase:
           name: clipper-db
           property: connectionString
+      - key: OPUSCLIP_API_KEY
+        sync: false
+      - key: OPUSCLIP_DAILY_CREDIT_BUDGET
+        sync: false
       - key: R2_ACCOUNT_ID
         sync: false
       - key: R2_ACCESS_KEY_ID
@@ -71,19 +76,17 @@ services:
         sync: false
       - key: R2_BUCKET_NAME
         sync: false
-      - key: OPUSCLIP_API_KEY
-        sync: false
-      - key: GOOGLE_API_KEY
-        sync: false
-      - key: ANTHROPIC_API_KEY
-        sync: false
       - key: NOTIFY_WEBHOOK_URL
         sync: false
 ```
 
-Both `clipper-api` and `clipper-worker` build from the same repo/codebase — they're two entrypoints (`start:api` vs `start:worker` in `package.json`) into the same `src/`, not two separate apps. Keep it that way; splitting the repo later would fight the module boundaries in `ARCHITECTURE.md` for no benefit yet.
+Both `clipper-api` and `clipper-sync` build from the same repo/codebase — they're two entrypoints (`start:api` vs `sync` in `package.json`) into the same `src/`, not two separate apps. Keep it that way; splitting the repo later would fight the module boundaries in `ARCHITECTURE.md` for no benefit yet.
 
 `clipper-db`'s connection string from Render's `fromDatabase` wiring is a direct connection, not a pooled one — no connection-mode caveats to document here, unlike a pooled provider.
+
+## The Claude operator
+
+The operator isn't a Render service. It's a Claude Code Routine (scheduled trigger) on this repository that runs the `clipper-operator` skill a few times a day and on demand. Its environment needs network access to Content Rewards, Google Docs/Drive, YouTube and OpusClip, plus these secrets: `DATABASE_URL` (Render's *external* connection string, restricted by IP allowlist where possible), `OPUSCLIP_API_KEY`, `OPUSCLIP_DAILY_CREDIT_BUDGET` and `NOTIFY_WEBHOOK_URL`. It never needs R2 or reviewer credentials, because it can't approve or package anything.
 
 ## Cold starts and the webhook
 
@@ -94,7 +97,7 @@ Render's **free** web service tier spins down after inactivity and takes a notic
 
 ## Migrations
 
-Render's **Pre-Deploy Command** (`npm run migrate` above) runs against the new release before it receives traffic, and before the worker restarts — this is what keeps `clipper-api` and `clipper-worker` from ever running against a schema they don't expect during a deploy.
+Render's **Pre-Deploy Command** (`npm run migrate` above) runs against the new release before it receives traffic. This keeps `clipper-api` and the next `clipper-sync` run from ever running against a schema they don't expect during a deploy.
 
 ## Secrets
 
