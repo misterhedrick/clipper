@@ -13,11 +13,12 @@ Phases 2-4 are intentionally not broken down to this granularity yet — do that
 - Implement schema from `DATA_MODEL.md` as migrations.
 - **Done when:** migrations run clean on an empty DB, and a manual insert/select round-trips through each table including the unique `(campaign_id, drive_file_id)` constraint (write a test that inserts a duplicate and asserts it's rejected).
 
-## 2. `campaign-connector`
+## 2. `campaign-connector` ✅ done
 - Implement URL → campaign ID resolution (direct `/discover/{id}` parse, and the `/campaigns/{id}` → 308 redirect fallback).
 - Implement discover-page JSON extraction per `API_CONTRACTS.md`.
 - Implement individual campaign page fetch for `guidelineDocUrl` / `driveFolderUrl`.
 - **Done when:** given the real MW4 campaign URL used during planning (`https://contentrewards.com/discover/24ad920b-d24f-479e-9cef-f22182e4a0c0`), the module returns title, platforms, payout data, and both linked URLs. Write this as an integration test (network-dependent, can be skipped in CI but must be runnable manually) — if Content Rewards changes markup, this is the test that catches it.
+- **Outcome:** run the live test with `RUN_NETWORK_TESTS=1 npm test -- live`. The reference campaign has no Drive folder: its footage is a MediaSilo link inside the guideline doc (see `API_CONTRACTS.md`), so `driveFolderUrl` is null for it. Resolve before task 6.
 
 ## 3. Campaign registration flow (minimal `review-api`)
 - One endpoint: `POST /campaigns { contentRewardsUrl }` → runs `campaign-connector`, inserts a `campaigns` row with `status = ingesting`, then `discovered`/`requirements_drafted` as steps complete.

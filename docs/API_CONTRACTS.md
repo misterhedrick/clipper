@@ -17,7 +17,7 @@ GET https://contentrewards.com/campaigns/{campaignId}
 
 If a user pastes a `/discover/{campaignId}` URL directly, the ID is just the path segment — no extra request needed.
 
-### Discover page embedded campaign data
+### Discover listing page embedded campaign data (not used by `campaign-connector`)
 
 `GET https://contentrewards.com/discover` returns server-rendered HTML with campaign objects embedded as escaped JSON inside the page payload (not a clean `<script id="__NEXT_DATA__">` block — it's further inside a streamed RSC payload). Observed fields per campaign object:
 
@@ -45,24 +45,42 @@ If a user pastes a `/discover/{campaignId}` URL directly, the ID is just the pat
 
 **Extraction approach:** fetch the raw HTML, regex/parse out the JSON object containing the target campaign's `id`, rather than trying to fully parse the RSC stream format. This is brittle by nature — write a test that fetches a known campaign ID and asserts the expected fields parse, so a Content Rewards frontend change is caught immediately rather than silently producing empty campaigns.
 
-### Individual campaign page
+### Individual campaign page (verified 2026-09-22 — this is what `campaign-connector` parses)
 
-`GET https://contentrewards.com/discover/{campaignId}` — same embedded-JSON approach, richer fields:
+`GET https://contentrewards.com/discover/{campaignId}` is a Next.js App Router page. Its data is streamed as `self.__next_f.push([1, "<chunk>"])` script tags; concatenating the string chunks gives the RSC payload, in which the campaign appears as a plain JSON object (currently the `card` prop of a component). `campaign-connector` locates it by finding the object whose **own top-level** `id` equals the campaign ID — the ID also appears in unrelated props (e.g. `{"campaignId": ...}` on the join button), so a bare substring match is not enough. It does not depend on the `card` key name.
+
+Observed shape (irrelevant fields omitted; `metrics` holds leaderboard data about other creators and is ignored):
 
 ```jsonc
 {
-  // all fields above, plus:
-  "payoutRates": {
-    "tiktok":    { "cpm": 1.75, "minPayout": 3.50, "maxPayout": 2500.00 },
-    "instagram": { "cpm": 1.50, "minPayout": 4.50, "maxPayout": 2500.00 },
-    "youtube":   { "cpm": 1.75, "minPayout": 5.25, "maxPayout": 2500.00 }
-  },
-  "guidelineDocUrl": "https://docs.google.com/document/d/{docId}/edit?usp=sharing",
-  "driveFolderUrl": "https://drive.google.com/drive/folders/{folderId}?usp=sharing"
+  "id": "24ad920b-d24f-479e-9cef-f22182e4a0c0",
+  "name": "Call of Duty - Modern Warfare 4 Multiplayer Beta Gameplay Clipping",  // not "title"
+  "description": "Post Modern Warfare 4 Multiplayer Beta gameplay to ...",
+  "organizationName": "Clipping Culture",        // → campaigns.brand
+  "organizationVerified": true,
+  "platforms": ["instagram", "tiktok", "youtube"],
+  "status": "paused",                              // Content Rewards' own status, e.g. active/paused
+  "private": false,
+  "requiresApplication": false,
+  "payoutType": "cpm",
+  "budgetCents": 7894530,
+  "payouts": [                                      // all money is integer cents
+    { "platform": "tiktok",    "payoutType": "cpm", "rateCents": 175, "minPayoutCents": 350, "maxPayoutCents": 250000 },
+    { "platform": "instagram", "payoutType": "cpm", "rateCents": 150, "minPayoutCents": 450, "maxPayoutCents": 250000 },
+    { "platform": "youtube",   "payoutType": "cpm", "rateCents": 175, "minPayoutCents": 525, "maxPayoutCents": 250000 }
+  ],
+  "referenceMaterials": [                           // the only place external links appear
+    { "type": "brandAsset", "mediaType": "external",
+      "url": "https://docs.google.com/document/d/{docId}/edit?usp=sharing" }
+  ],
+  "createdAt": "2026-08-26T18:38:51.000Z",
+  "updatedAt": "2026-09-22T22:46:23.000Z"
 }
 ```
 
-The exact key names for `guidelineDocUrl`/`driveFolderUrl` need confirming against the live page during implementation (they were located by grepping the raw HTML for `docs.google.com` / `drive.google.com` substrings, not by reading a clean field name) — grep is a fine permanent strategy here too, it's simpler than depending on the RSC structure.
+There are no dedicated `guidelineDocUrl` / `driveFolderUrl` fields. The connector takes the first `referenceMaterials` URL matching `docs.google.com/document/d/{id}` as the guideline doc and the first matching `drive.google.com/drive/folders/{id}` as the footage folder; either may be null.
+
+**The footage folder is not necessarily a Drive folder, and not necessarily on the campaign page.** For the MW4 reference campaign, `referenceMaterials` contains only the guideline doc; the doc itself says `Content Folder: https://app.mediasilo.com/review/...` — footage is hosted on MediaSilo, not Google Drive. How footage sources other than a public Drive folder are handled is an open question for `footage-enumerator` (BUILD_PLAN task 6).
 
 ### Guideline doc (Google Docs)
 
