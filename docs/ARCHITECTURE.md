@@ -180,7 +180,7 @@ Modules talk to each other through their exported functions, not each other's ta
 |---|---|---|
 | Runtime | TypeScript on Node 22 | built |
 | HTTP | Fastify | built (`/health` + review web app, server-rendered, no client JS) |
-| Database | Postgres (Render managed), Drizzle migrations | built |
+| Database | Postgres (Supabase free, via the Session pooler with TLS verified against Supabase's CA), Drizzle migrations | built |
 | Validation | zod | built |
 | CLI | plain `node` entry with a small arg parser (no framework needed) | to build |
 | Operator | Claude Code Routine on this repo, with the OpusClip connector attached and `DATABASE_URL`, `NOTIFY_WEBHOOK_URL` in the environment | to set up |

@@ -101,7 +101,7 @@ Content Rewards URL → metadata + reference materials. Live canary test: `RUN_N
   - **Notifications:** `attention notify` sends one digest (Slack `{text}` or Discord `{content}`, detected from the URL) of failed/flagged jobs and campaigns plus configs waiting over 24h. It records each item as notified for its current status event only after delivery succeeds, so the same failure isn't re-sent hourly, a new one is, and a failed delivery is retried next run. The playbook runs it at the end of every operator run.
   - **Done-when:** a forced validation failure (Drive sign-in wall) was delivered to a local webhook receiver; bundle and refusal checks pass. **Pending live:** a real R2 bucket and a real Slack/Discord webhook (you provide both), and a real OpusClip export URL from the first live test.
 
-## 13. Operator deployment
+## 13. Operator deployment ⏳ in progress
 - Render: web service (review app + `/health`) and Postgres only. No worker, no cron.
 - Claude Code Routine on this repo, hourly, running the `clipper-operator` skill, with the OpusClip connector attached and `DATABASE_URL`, `OPUSCLIP_DAILY_CREDIT_BUDGET` and `NOTIFY_WEBHOOK_URL` in its environment. The project `.claude/settings.json` (submit guard hook, denied posting tools) must be active there. Verify by attempting a forbidden call in a dry run and seeing it refused.
 - **Done when:** a scheduled run completes the loop on an empty queue and posts a "nothing needs you" report, and a deliberately unreserved submit in that environment is blocked by the hook.

@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "dev:api": "tsx watch src/server.ts",
     "start:api": "node dist/server.js",
+    "start:render": "node dist/db/migrate.js && node dist/server.js",
     "db:generate": "drizzle-kit generate",
     "migrate": "node dist/db/migrate.js",
     "migrate:dev": "tsx src/db/migrate.ts",

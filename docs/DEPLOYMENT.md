@@ -1,95 +1,57 @@
-# Deployment (Render + Cloudflare R2)
+# Deployment (Render + Supabase + Cloudflare R2)
 
-This maps the architecture in `ARCHITECTURE.md` onto concrete hosting. Nothing here is deployed yet — this is the target to build toward once Phase 1 code exists.
+The review web app runs on Render, the database is Supabase's free Postgres, and Ready-to-Post bundles go to Cloudflare R2. The Claude operator runs as a Claude Code Routine, not on Render (see below). There's no worker or cron: OpusClip is reached through the OpusClip connector, which only exists inside a Claude session, so the hourly operator run does the polling too.
 
-## Services
+Revised 2026-09-23: the database moved from Render Postgres to Supabase to keep hosting free. `render.yaml` in the repo root matches what's described here.
 
-Two Render resources (web service + Postgres), a Cloudflare R2 bucket, and the Claude operator, which runs as a Claude Code Routine, not on Render (see below). There's no worker or cron: OpusClip is reached through the OpusClip connector, which only exists inside a Claude session, so the hourly operator run does the polling., plus a Cloudflare R2 bucket for file storage:
+## Resources
 
-| Resource | Where | Runs | Why |
+| Resource | Where | Plan | Notes |
 |---|---|---|---|
-| **Web Service** | Render | Fastify app: `review-api` HTTP routes + the OpusClip webhook receiver (`server.ts`) | Needs a public HTTPS URL — this is what `conclusionActions` in `API_CONTRACTS.md` points at, and what a human reviewer's browser hits. |
-| **PostgreSQL** | Render | The `tracker` database from `DATA_MODEL.md`; status columns double as the work queue | A plain managed instance, not behind a transaction-mode pooler, so `SELECT … FOR UPDATE` credit reservations behave normally. Database and compute share one platform and bill. |
-| **R2 bucket** | Cloudflare | `Ready to Post` / `Archive` / `Needs Attention` export bundles (`final.mp4`, `thumbnail.jpg`, `caption.txt`, `clip-metadata.json`) | S3-API-compatible, zero egress fees for the reviewer/poster downloads that happen on every approved clip. |
+| **Web service** `clipper-review` | Render, Virginia | free | The Fastify app: review pages + `/health`. Deploys `main` on every push. Free services sleep when idle, so the first page load after a quiet spell takes ~30–60 s. Switch to `starter` for always-on. |
+| **Postgres** | Supabase | free | 500 MB, plenty for this. **Free projects pause after ~7 days without activity**; the hourly operator run keeps it awake once it's scheduled. |
+| **R2 bucket** | Cloudflare | free tier | Ready-to-Post bundles. Zero egress fees for the downloads that happen on every approved clip. |
 
-## `render.yaml` sketch
+## Supabase connection: two settings
 
-```yaml
-databases:
-  - name: clipper-db
-    plan: starter
-    postgresMajorVersion: "16"
+1. **`DATABASE_URL` = the Session pooler string.** In Supabase: *Connect → Session pooler*. It looks like `postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres`. Don't use the "Direct connection": it's IPv6-only on the free plan, and Render can't make IPv6 connections. Session mode (port 5432) behaves like a normal connection, so `SELECT … FOR UPDATE` and the credit-budget advisory lock work as designed. Don't use the transaction pooler (port 6543).
+2. **`DATABASE_CA_CERT` = Supabase's root CA certificate**, pasted as the whole PEM text. Get it from *Project Settings → Database → SSL Configuration → Download certificate*. With it set, `src/db/client.ts` requires TLS and verifies the server against that CA; a wrong or missing CA fails the connection instead of silently connecting unverified. (`sslmode=no-verify` in the URL would also connect, but without checking who's on the other end: avoid it.)
 
-services:
-  - type: web
-    name: clipper-api
-    runtime: node
-    plan: starter          # not free — see "Cold starts" below
-    buildCommand: npm ci && npm run build
-    preDeployCommand: npm run migrate   # runs schema migrations before the new version goes live
-    startCommand: npm run start:api
-    healthCheckPath: /health
-    envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: clipper-db
-          property: connectionString
-      - key: R2_ACCOUNT_ID
-        sync: false
-      - key: R2_ACCESS_KEY_ID
-        sync: false
-      - key: R2_SECRET_ACCESS_KEY
-        sync: false
-      - key: R2_BUCKET_NAME
-        sync: false
-      - key: REVIEWER_TOKEN
-        sync: false
-      - key: NOTIFY_WEBHOOK_URL
-        sync: false
-      - key: REVIEW_URL          # optional: linked from notifications
-        sync: false
-```
+Both go in the Render service's environment, and in the operator Routine's environment.
 
-On the web service, the `R2_*` variables are optional: they let the review page offer signed, one-hour download links to each Ready-to-Post bundle. Give it a key that can read the bucket. The operator's key needs write access, for `clipper package`.
+## The web service
 
-The operator runs the same codebase's `clipper` CLI from its own checkout of this repo, so there's one implementation of every rule. Keep it that way; splitting the repo later would fight the module boundaries in `ARCHITECTURE.md` for no benefit yet.
+`render.yaml`:
 
-`clipper-db`'s connection string from Render's `fromDatabase` wiring is a direct connection, not a pooled one — no connection-mode caveats to document here, unlike a pooled provider.
-
-## The Claude operator
-
-The operator isn't a Render service. It's a Claude Code Routine (scheduled trigger) on this repository that runs the `clipper-operator` skill hourly and on demand. It needs:
-
-- **The OpusClip connector** attached (Pro plan; the org is fixed at connect time, so connect the right one).
-- **Network access** to Content Rewards, Google Docs/Drive, YouTube and your Postgres.
-- **Secrets:** `DATABASE_URL` (Render's *external* connection string, restricted by IP allowlist where possible), `OPUSCLIP_DAILY_CREDIT_BUDGET`, `NOTIFY_WEBHOOK_URL`, and the bucket-scoped R2 key pair (for `clipper package`, which refuses anything a person didn't approve).
-- **This repo's `.claude/settings.json` in force.** It holds the submit guard hook and the denied posting/sharing tools. Check this in the Routine's environment before relying on it (BUILD_PLAN task 13).
-
-It never needs `REVIEWER_TOKEN`: approval happens only in the web app.
+- **Build:** `npm ci --include=dev && npm run build`. Dev dependencies are needed to compile TypeScript, even if `NODE_ENV=production`.
+- **Start:** `npm run start:render` = migrations, then the server. The free plan has no pre-deploy step; running migrations at start is safe with a single instance, and already-applied migrations are skipped. Rehearsed locally: empty database → 5 migrations over verified TLS → `/health` 200.
+- **Health check:** `/health` (200 only once the database answers).
+- **Env:** `NODE_VERSION=22`; `TRUST_PROXY_HOPS=1` (Render's proxy is one hop, so the sign-in throttle sees real client IPs, and clients can't spoof theirs); `REVIEWER_TOKEN` (generated by Render: read it in the dashboard, it's what you sign in with); `DATABASE_URL`, `DATABASE_CA_CERT`; optionally `REVIEW_URL` and the `R2_*` set (for download links on the review page; a read-only key is enough there).
 
 ## Review web app sign-in
 
-Reviewers sign in at the web service's URL with their name and `REVIEWER_TOKEN` (at least 24 characters; generate one with `openssl rand -base64 32`). The session cookie is `Secure`, so the app must be served over HTTPS; Render's default `onrender.com` domain already is. Rotating `REVIEWER_TOKEN` signs everyone out. The sign-in throttle is in memory, which is fine for one instance. If the service ever scales out, put the app behind an SSO proxy or a shared rate limit.
+Reviewers sign in at the service's URL with their name and `REVIEWER_TOKEN` (at least 24 characters). The session cookie is `Secure`, so the app must be served over HTTPS; Render's `onrender.com` domain is. Rotating `REVIEWER_TOKEN` signs everyone out. The sign-in throttle is in memory, which is fine for one instance. If the service ever scales out, put the app behind an SSO proxy or a shared rate limit.
 
-## Cold starts and the webhook
+## The Claude operator
 
-Render's **free** web service tier spins down after inactivity and takes a noticeable moment to wake on the next request. That's a real problem for a webhook receiver — OpusClip calling back to a cold service risks a dropped or delayed delivery. Two ways this is already covered rather than needing new design:
+A Claude Code Routine on this repository that runs the `clipper-operator` skill hourly and on demand. Its environment needs:
 
-1. Use at least the **Starter** (always-on) plan for `clipper-api`, not Free, once this is more than a local experiment.
-2. Even so, don't rely on the webhook being delivered — `project-monitor`'s polling path (already required as the source of truth in `ARCHITECTURE.md` / `API_CONTRACTS.md`) means a missed or delayed webhook just means the poll catches it a bit later, not a lost clip.
+- **The OpusClip connector** attached (Pro plan; the org is fixed at connect time, so connect the right one).
+- **Network access** to Content Rewards, Google Docs/Drive, YouTube, OpusClip's CDN, Supabase (`*.pooler.supabase.com:5432`), R2 (`*.r2.cloudflarestorage.com`) and your webhook host.
+- **Secrets:** `DATABASE_URL`, `DATABASE_CA_CERT`, `OPUSCLIP_DAILY_CREDIT_BUDGET`, `NOTIFY_WEBHOOK_URL`, `REVIEW_URL`, and the R2 key pair with write access (for `clipper package`, which refuses anything a person didn't approve).
+- **Dependencies installed:** `npm ci` at session start, so `npx clipper` works.
+- **This repo's `.claude/settings.json` in force.** It holds the submit guard hook and the denied posting/sharing tools. Check this in the Routine's environment before relying on it.
+
+It never needs `REVIEWER_TOKEN`: approval happens only in the web app.
 
 ## Migrations
 
-Render's **Pre-Deploy Command** (`npm run migrate` above) runs against the new release before it receives traffic. The operator's CLI reads the same database, so deploy schema changes before merging operator code that needs them.
+Schema changes ship as Drizzle migrations and run when the web service starts. The operator's CLI reads the same database, so let a deploy with a schema change finish before the operator runs code that needs it.
 
 ## Secrets
 
-Every secret the services use — `REVIEWER_TOKEN`, `NOTIFY_WEBHOOK_URL`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, plus `DATABASE_URL` which Render injects automatically from the database resource — is set directly in the Render dashboard per service, `sync: false` in the blueprint so `render.yaml` itself never carries values. Never commit a `.env` with real values — `.env` should be in `.gitignore` from the first commit. The R2 access key pair is scoped to the one bucket, not account-wide, when created in the Cloudflare dashboard.
+Set every secret in the Render dashboard and the Routine's environment. Never in the repo: `render.yaml` marks them `sync: false`, and `.env` is gitignored. Scope the R2 key to the one bucket.
 
-## Health check
+## Local development
 
-`clipper-api` needs a `GET /health` route returning 200 as soon as the DB connection is confirmed live — this is what Render's `healthCheckPath` uses to decide the deploy succeeded and to keep routing traffic to the instance. Build this in task 0 of `BUILD_PLAN.md`, not as an afterthought.
-
-## Local development vs. deployed
-
-Nothing above blocks local development — `docker-compose` (or a local Postgres) plus a `.env` pointing at a separate dev R2 bucket covers that, and should be set up before Render enters the picture at all. Render is where Phase 1's end-to-end smoke test (`BUILD_PLAN.md` task 14) should ultimately run against, once there's a deployable build, so that "works deployed" is verified before calling Phase 1 done — not assumed from local-only testing.
+A local Postgres plus a `.env` (see `.env.example`) covers everything. `DATABASE_CA_CERT` is only needed against Supabase.

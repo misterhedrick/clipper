@@ -112,6 +112,17 @@ describe.skipIf(!TEST_DATABASE_URL)("review web app", () => {
       await own.close();
     });
 
+    it("behind a proxy, throttles by the real client IP, not the proxy's", async () => {
+      const own = buildApp({ db, reviewerToken: TOKEN, trustProxyHops: 1 });
+      const attempt = (ip: string, token: string) =>
+        own.inject({ method: "POST", url: "/login", remoteAddress: "10.0.0.1", headers: { ...FORM, "x-forwarded-for": ip }, payload: form({ name: "alex", token }) });
+      for (let i = 0; i < 10; i++) await attempt("203.0.113.9", "nope");
+      expect((await attempt("203.0.113.9", TOKEN)).statusCode).toBe(429);
+      // The real reviewer, arriving through the same proxy from another IP, isn't locked out.
+      expect((await attempt("198.51.100.7", TOKEN)).statusCode).toBe(303);
+      await own.close();
+    });
+
     it("signs in with a hardened cookie and serves pages with security headers", async () => {
       const { res, cookie } = await login("alex");
       expect(res.statusCode).toBe(303);

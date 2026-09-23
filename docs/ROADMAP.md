@@ -2,7 +2,7 @@
 
 **Start here.** This page says where the project is going, how the whole process will work when it's done, and exactly where it stands today. It's the summary; the detail lives in the docs it links to.
 
-*Last updated: 2026-09-23 · tasks 0–12 built; live checks for 8, 9 and 12 pending*
+*Last updated: 2026-09-23 · tasks 0–12 built, task 13 (deploy) in progress; live checks for 8, 9 and 12 pending*
 
 ---
 
@@ -86,7 +86,7 @@ Claude runs this loop **hourly** as a Claude Code Routine and ends each run with
 | 10 | Caption validation + pre-screen + reviewer-requested edits | ✅ |
 | 11 | Review web page (confirm configs, approve clips, record posts) | ✅ |
 | 12 | Ready-to-Post packaging to R2 + notifications | ✅ code · ⏳ real bucket + webhook |
-| 13 | Deploy: Render (web + Postgres) + hourly Claude Routine | ⏳ next |
+| 13 | Deploy: Render web (free) + Supabase Postgres (free) + hourly Claude Routine | ⏳ in progress: deploy config done; waiting on the Supabase project |
 | 14 | End to end on a real campaign, twice (idempotency) | ⏳ |
 
 **Milestone A (Claude can read campaigns) is done.** Claude can scout, add, classify, read briefs, propose configs and choose footage, all through the CLI, with nothing spent.
@@ -102,7 +102,7 @@ Claude runs this loop **hourly** as a Claude Code Routine and ends each run with
 | **A. Claude can read campaigns** | 3–7 | Scout → brief → config → footage | No · ✅ done |
 | **B. Clips get made** | 8–10 | Submit to OpusClip within budget, collect and pre-screen clips | OpusClip credits · built, live check pending |
 | **C. Review and packages** | 11–12 | Your review page, clip bundles, notifications | Storage (small) · built, needs your bucket + webhook |
-| **D. Runs itself** | 13–14 | Hosted, scheduled, proven on a real campaign | Hosting |
+| **D. Runs itself** | 13–14 | Hosted, scheduled, proven on a real campaign | $0 on free tiers (Render web + Supabase); ~$7/mo if the review page should never sleep |
 
 ### Verified against the real world
 
@@ -128,7 +128,7 @@ Claude runs this loop **hourly** as a Claude Code Routine and ends each run with
    4. You approve a clip. The operator exports it and runs `clipper package`, and you get the bundle link.
 
    On the first upsert, check the real `opusclip_list_clips` field names and stage values against the parser (`src/modules/candidates/opusclip.ts`), and narrow it to what OpusClip actually sends.
-2. **Task 13:** deploy to Render (web service + Postgres) and schedule the hourly operator Routine.
+2. **Task 13:** the review page on Render (free) with Supabase's free Postgres, then the hourly operator Routine.
 3. **Task 14:** end to end on a real campaign, twice, checking nothing duplicates.
 
 ## 7. Decisions and inputs needed from you
@@ -138,7 +138,7 @@ Claude runs this loop **hourly** as a Claude Code Routine and ends each run with
 | Before the first real test | Join the Charlie Berens campaign on Content Rewards, then OK spending ~10 credits on a 10-minute slice |
 | Before the first real test | A Cloudflare R2 bucket for clip bundles, with a bucket-scoped API token (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`), and a Slack or Discord incoming-webhook URL (`NOTIFY_WEBHOOK_URL`). The code is ready for both. |
 | Before real use | Pick a daily credit budget (placeholder: 120/day ≈ 2 hours of footage; the month's 900 credits ≈ 15 hours) |
-| Milestone D | A Render account (web service + Postgres) |
+| Now (task 13) | A free Supabase project. Put its Session-pooler connection string and root CA certificate into the Render service's environment (`DATABASE_URL`, `DATABASE_CA_CERT`); steps in `DEPLOYMENT.md`. You have the Render account. |
 
 ## 8. Known limits (v1)
 
@@ -148,6 +148,7 @@ Claude runs this loop **hourly** as a Claude Code Routine and ends each run with
 - **Video length is unknown** before submitting, so credits are held at a 90-minute estimate unless a range or length is given. `credits reconcile` corrects the ledger from OpusClip's real usage.
 - **No automated posting.** It's out of scope for v1 by design.
 - **Clip field names not yet seen live.** No OpusClip project existed when `candidate upsert` was built, so its parser accepts several spellings of each field. The first real run confirms which one OpusClip uses.
+- **Free hosting sleeps.** The review page (Render free) takes ~30–60 s to wake after idling, and a Supabase free project pauses after ~7 days without activity (the hourly operator run prevents that).
 - **One shared reviewer token.** The review page signs in with a name + `REVIEWER_TOKEN`, so the name is self-declared. Per-person accounts are a Phase 2 item.
 - **Disclosures always go on their own line.** The config has no per-campaign switch; every `disclosureLines` entry must be a line of its own.
 

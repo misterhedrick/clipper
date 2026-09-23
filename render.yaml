@@ -1,0 +1,39 @@
+# Render Blueprint for the review web app. The database is Supabase (free
+# Postgres), not Render Postgres: set DATABASE_URL to Supabase's *Session
+# pooler* connection string (port 5432; the direct connection is IPv6-only on
+# Supabase's free plan and Render can't reach it), and DATABASE_CA_CERT to
+# Supabase's root CA (Project Settings → Database → SSL → Download certificate)
+# so TLS is verified. See docs/DEPLOYMENT.md.
+services:
+  - type: web
+    name: clipper-review
+    runtime: node
+    plan: free                 # sleeps when idle; "starter" keeps it always on
+    region: virginia
+    branch: main
+    buildCommand: npm ci --include=dev && npm run build
+    # Free plan has no pre-deploy step, so migrations run at start (single instance).
+    startCommand: npm run start:render
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: TRUST_PROXY_HOPS   # Render's proxy is one hop: throttle sign-ins by the real client IP
+        value: "1"
+      - key: REVIEWER_TOKEN
+        generateValue: true     # read it in the dashboard; you sign in with it
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_CA_CERT
+        sync: false
+      - key: REVIEW_URL         # optional: linked from notifications
+        sync: false
+      # Optional on the web app: signed download links to bundles.
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET_NAME
+        sync: false
