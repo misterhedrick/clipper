@@ -8,11 +8,13 @@ The goal is simple:
 
 It's run by a **Claude operator**, a scheduled Claude Code session that follows a playbook (`.claude/skills/clipper-operator/`). Claude does the reading and judgment; a small `clipper` CLI and database do everything that must be exact, idempotent or safe. You keep every decision that commits to a campaign, spends credits beyond the budget, or publishes.
 
+> **Status & direction:** see [`docs/ROADMAP.md`](docs/ROADMAP.md) for how the whole process will work, what's built (tasks 0–8, Milestone A done), what's next, and what's needed from you.
+
 **This file is the product spec (what and why).** Before writing code, also read, in order:
 
 1. [`docs/CAMPAIGN_SURVEY.md`](docs/CAMPAIGN_SURVEY.md): what real Content Rewards campaigns look like, and the evidence behind the design
 2. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): the code / Claude / human split, guardrails, CLI contract, footage source kinds
-3. [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md): database schema, including planned v2 changes
+3. [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md): database schema (v1–v3 migrations) and `transition()` rules
 4. [`docs/API_CONTRACTS.md`](docs/API_CONTRACTS.md): Content Rewards (verified live), Google Docs/Drive, OpusClip
 5. [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md): ordered, checkable implementation tasks for Phase 1
 6. [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md): Render hosting
