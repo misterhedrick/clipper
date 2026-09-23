@@ -44,6 +44,8 @@ flowchart LR
 - **Claude operator run**: a Claude Code Routine against this repo, hourly and on demand. It works through the playbook's loop: triage → collect finished clips → pre-screen → package approved clips → source footage → submit → onboard → scout. It ends with a short report. Because the OpusClip connector is only available inside a Claude session, the operator run also does the polling a cron job would otherwise do.
 - **Review web app**: the one human-facing surface. Confirm campaign configs, approve/reject clips, record post URLs. Served by the existing Fastify app.
 
+In the cloud Routine, the CLI runs in **remote mode**: Claude's cloud sessions can only make HTTPS requests, so each `clipper` command is sent to the review app's `POST /operator/run` and runs there through the same code, as `claude-operator`, under a separate `OPERATOR_TOKEN` (see `DEPLOYMENT.md`). Locally, the CLI talks to Postgres directly.
+
 There is no background worker and no cron job. Hourly operator runs are fast enough for this workflow: OpusClip takes minutes to hours per video, and review waits on a person anyway.
 
 **Fallback:** Pro also includes the plain OpusClip API. If operator runs ever prove too slow or too costly just for polling, `clipper sync` can be added as a Render Cron Job that polls with `OPUSCLIP_API_KEY` and writes through the same CLI functions. Nothing else changes.

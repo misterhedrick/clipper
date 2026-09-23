@@ -5,7 +5,7 @@ A clip-automation pipeline: Content Rewards campaigns → footage → OpusClip �
 ## Two modes of working in this repo
 
 - **Developing the platform:** follow `docs/BUILD_PLAN.md` in order. Each task has a "done when" check; verify it before moving on.
-- **Operating the pipeline** ("do an operator run", "scout campaigns", "onboard this campaign"): use the `clipper-operator` skill in `.claude/skills/`. In this mode you act only through the `clipper` CLI and the OpusClip connector, and only submit to OpusClip with parameters from `clipper source reserve`. A hook in `.claude/settings.json` blocks anything else; don't weaken or bypass it.
+- **Operating the pipeline** ("do an operator run", "scout campaigns", "onboard this campaign"): use the `clipper-operator` skill in `.claude/skills/`. In this mode you act only through the `clipper` CLI and the OpusClip connector, and only submit to OpusClip with parameters from `clipper source reserve`. A hook in `.claude/settings.json` blocks anything else; don't weaken or bypass it. In the cloud Routine, `CLIPPER_REMOTE_URL` makes every `clipper` command run on the review app over HTTPS (the cloud can't open Postgres connections); the commands and rules are the same.
 
 ## The split to preserve
 

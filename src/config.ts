@@ -18,6 +18,8 @@ const sections = {
     REVIEWER_TOKEN: z.string().min(24, "must be at least 24 characters"),
     // Reverse-proxy hops in front of the app (1 on Render); 0 when run directly.
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
+    // Enables POST /operator/run for the Claude operator (src/web/operator.ts). Unset = endpoint off.
+    OPERATOR_TOKEN: z.string().min(32, "must be at least 32 characters").optional(),
   }),
   credits: z.object({
     // Max OpusClip credits `clipper source reserve` may hold per UTC day (~1 credit per source minute).
