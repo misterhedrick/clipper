@@ -23,7 +23,7 @@ Build it from the campaign config:
 - `disclosureLines` on their own line, as the brief requires.
 - No more hashtags than `maxAdditionalHashtags` beyond the required ones.
 
-`clipper candidate set-caption <id> --file caption.txt`. The CLI rejects a caption missing any requirement. If it's rejected, fix it; don't work around the check.
+`clipper candidate set-caption <id> --file caption.txt`. The CLI rejects a caption missing any requirement, with an `issues` list naming each rule it broke (`required_caption_line`, `required_tag`, `disclosure`, `hashtag_limit`). If it's rejected, fix those issues; don't work around the check. Captions can be set only while a candidate is `awaiting_review` or `needs_edit`.
 
 ## 3. Fixing clips a reviewer sent back (`needs_edit`)
 
