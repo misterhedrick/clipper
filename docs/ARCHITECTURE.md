@@ -95,7 +95,7 @@ clipper campaign list [--status s]              (r)
 clipper campaign brief <id> [--doc <url>]       (r) guideline doc text + every hyperlink in it (HTML export), plus referenceMaterials; --doc reads a linked sub-doc
 clipper campaign classify <id> --type <lf|ugc|music|slideshow|unclear> --reason "..."
 clipper campaign propose-config <id> --file config.json   validate (zod) + store draft; status → pending_confirmation
-clipper campaign flag <id> --reason "..."           status → needs_attention + notify
+clipper campaign flag <id> --reason "..."           status → needs_attention (announced by `attention notify`)
 
 # Footage
 clipper footage list-url <url> [--campaign <id>] (r) expand a Drive folder (recursive, with folder paths), YouTube channel (15 most recent uploads, Shorts flagged) or file link into
@@ -127,8 +127,9 @@ clipper candidate set-caption <id> --file caption.txt   validated against campai
 
 # Operations
 clipper package <candidateId>                       approved + export URL recorded → R2 bundle → ready_to_post (refuses anything not approved by a human)
-clipper attention list                          (r) everything in needs_attention with reasons
-clipper notify --message "..."                      send a message to the human via NOTIFY_WEBHOOK_URL
+clipper attention list                          (r) jobs/campaigns needing triage + configs waiting for confirmation, with reasons
+clipper attention notify                            one digest of items not yet announced for their current status (+ configs waiting > 24h)
+clipper notify --message "..."                      send a message to the human via NOTIFY_WEBHOOK_URL (Slack or Discord webhook)
 ```
 
 ## Footage source kinds
@@ -164,8 +165,9 @@ src/
     candidates/             opusclip_list_clips parsing, candidate upsert, pre-screen, captions, edit log
     review/                 human-only decisions: confirm/pause campaigns, approve/needs-edit/reject/hold, record posts
   web/                      review web app: reviewer sign-in (auth.ts), escaped HTML (html.ts), pages + forms (routes.ts)
-    packaging/              Ready-to-Post bundle → R2
-    notifier/               webhook delivery
+    packaging/              Ready-to-Post bundle → R2 (streamed; r2.ts is the S3-API adapter)
+    notifier/               webhook delivery (Slack / Discord)
+    attention/              what needs a person, and the once-per-status-change notification digest
 .claude/
   skills/clipper-operator/  the playbook Claude follows (SKILL.md + one file per procedure)
 ```
@@ -183,6 +185,6 @@ Modules talk to each other through their exported functions, not each other's ta
 | CLI | plain `node` entry with a small arg parser (no framework needed) | to build |
 | Operator | Claude Code Routine on this repo, with the OpusClip connector attached and `DATABASE_URL`, `NOTIFY_WEBHOOK_URL` in the environment | to set up |
 | OpusClip | OpusClip connector (MCP), Pro plan: 900 credits/month, 10 concurrent projects (checked 2026-09-22) | connected |
-| Storage | Cloudflare R2 | to build |
+| Storage | Cloudflare R2 via `@aws-sdk/client-s3` + `lib-storage` (streaming multipart) | built; bucket not created yet |
 
 `ANTHROPIC_API_KEY` and `OPUSCLIP_API_KEY` are no longer app dependencies. The app makes no LLM calls and doesn't call OpusClip; both happen in the operator session.

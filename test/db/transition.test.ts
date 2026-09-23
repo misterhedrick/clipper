@@ -102,6 +102,21 @@ describe.skipIf(!TEST_DATABASE_URL)("transition()", () => {
     }
   });
 
+  it("lets automation return a failed packaging run to approved, and nothing else", async () => {
+    const campaign = await insertCampaign(db, "c", "active");
+    const job = await insertSourceJob(db, campaign.id, "f", { status: "candidates_ready" });
+    const [clip] = await db
+      .insert(candidateClips)
+      .values({ sourceJobId: job.id, opusclipClipId: "p.c", status: "awaiting_review" })
+      .returning();
+    await transition(db, { entity: "candidate_clip", id: clip!.id, to: "approved", actor: "reviewer:alex" });
+    await transition(db, { entity: "candidate_clip", id: clip!.id, to: "exporting", actor: OPERATOR_ACTOR });
+    await expect(transition(db, { entity: "candidate_clip", id: clip!.id, to: "approved", actor: OPERATOR_ACTOR })).resolves.toEqual({
+      from: "exporting",
+      to: "approved",
+    });
+  });
+
   it("enforces an expectFrom precondition", async () => {
     const campaign = await insertCampaign(db);
     const err = await rejection(

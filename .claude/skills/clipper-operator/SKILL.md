@@ -41,7 +41,7 @@ Triage, collecting and pre-screening come first because they unblock people. Sco
 
 ## End every run with a report
 
-Post it with `clipper notify` and also return it as your final message. Keep it short:
+First run `clipper attention notify`. It sends one digest of anything newly needing a person (failed jobs, flagged campaigns, configs waiting over 24h), each announced once per status change. Then post the report with `clipper notify --message "..."` and also return it as your final message. Keep it short:
 
 ```
 Operator run — <date>

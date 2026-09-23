@@ -1,6 +1,7 @@
 import { ConfigError, loadConfig, type Config } from "./config.js";
 import { createDb } from "./db/client.js";
 import { buildApp } from "./app.js";
+import { r2Store } from "./modules/packaging/r2.js";
 
 let config: Config<"db" | "server">;
 try {
@@ -14,7 +15,14 @@ try {
 }
 
 const { db, pool } = createDb(config.DATABASE_URL);
-const app = buildApp({ db, reviewerToken: config.REVIEWER_TOKEN });
+// R2 is optional for the web app: without it, packaged bundles just aren't linked for download.
+let bundles: ReturnType<typeof r2Store> | undefined;
+try {
+  bundles = r2Store(loadConfig(["r2"]));
+} catch (err) {
+  if (!(err instanceof ConfigError)) throw err;
+}
+const app = buildApp({ db, reviewerToken: config.REVIEWER_TOKEN, bundles });
 
 const shutdown = async () => {
   await app.close();

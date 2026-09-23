@@ -6,6 +6,7 @@ import {
   upsertCandidates,
 } from "../../modules/candidates/index.js";
 import { resolveCampaign } from "../../modules/campaigns/index.js";
+import { recordExport } from "../../modules/packaging/index.js";
 import { positional, readJsonInput, readTextInput, requiredOption, type Command, type CommandContext } from "../run.js";
 
 // There is deliberately no approve / reject / needs-edit / post command here:
@@ -44,6 +45,12 @@ export const candidateCommands: Record<string, Command> = {
     usage: "<candidateId> --file <caption.txt | ->",
     options: { file: { type: "string" } },
     run: async (ctx) => setCaption(moduleCtx(ctx), positional(ctx, 0, "candidateId"), await readTextInput(ctx, requiredOption(ctx, "file"))),
+  },
+  "record-export": {
+    summary: "Store the HD export_url from opusclip_export_clip for an approved candidate (then run `clipper package`).",
+    usage: "<candidateId> --url <exportUrl>",
+    options: { url: { type: "string" } },
+    run: (ctx) => recordExport(moduleCtx(ctx), positional(ctx, 0, "candidateId"), requiredOption(ctx, "url")),
   },
   "record-edit": {
     summary: "Log an opusclip_edit_clip call made for a reviewer's needs_edit request; the candidate returns to awaiting_review.",

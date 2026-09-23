@@ -46,7 +46,11 @@ services:
         sync: false
       - key: NOTIFY_WEBHOOK_URL
         sync: false
+      - key: REVIEW_URL          # optional: linked from notifications
+        sync: false
 ```
+
+On the web service, the `R2_*` variables are optional: they let the review page offer signed, one-hour download links to each Ready-to-Post bundle. Give it a key that can read the bucket. The operator's key needs write access, for `clipper package`.
 
 The operator runs the same codebase's `clipper` CLI from its own checkout of this repo, so there's one implementation of every rule. Keep it that way; splitting the repo later would fight the module boundaries in `ARCHITECTURE.md` for no benefit yet.
 

@@ -17,6 +17,7 @@ import {
   setCampaignPaused,
   type ReviewCtx,
 } from "../modules/review/index.js";
+import { BUNDLE_FILES, type BundleStore } from "../modules/packaging/index.js";
 import { createSession, readCookie, REVIEWER_NAME, SESSION_COOKIE, sessionCookie, tokenMatches, verifySession } from "./auth.js";
 import { badge, html, page, safeUrl, seconds, when, type Html } from "./html.js";
 
@@ -31,7 +32,7 @@ declare module "fastify" {
 }
 
 type Form = Record<string, string>;
-export type ReviewAppOptions = { db: Db; reviewerToken: string; now?: () => Date };
+export type ReviewAppOptions = { db: Db; reviewerToken: string; now?: () => Date; bundles?: BundleStore };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LOGIN_WINDOW_MS = 15 * 60_000;
@@ -396,6 +397,11 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
       const deciding = clip.status === "awaiting_review";
       const captionEditable = clip.status === "awaiting_review" || clip.status === "needs_edit";
       const postable = clip.status === "ready_to_post" || clip.status === "posted";
+      const signer = opts.bundles?.signedUrl;
+      const downloads =
+        clip.packageKey && signer
+          ? await Promise.all(BUNDLE_FILES.map(async (f) => ({ file: f, url: await signer(`${clip.packageKey}${f}`, 3600) })))
+          : [];
       const list = (label: string, items: string[] | undefined) =>
         items?.length ? html`<li><strong>${label}:</strong> ${items.map((i) => html`<code>${i}</code> `)}</li>` : "";
 
@@ -465,6 +471,15 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
                 ? html`<div class="card"><strong>Review notes:</strong> ${clip.reviewNotes}</div>`
                 : ""}
 
+          ${clip.packageKey
+            ? html`<h2>Ready-to-Post bundle</h2>
+              <div class="card">
+                <p class="muted">Packaged ${when(clip.packagedAt)} · <code>${clip.packageKey}</code></p>
+                ${downloads.length
+                  ? html`<p class="actions">${downloads.map((d) => html`<a href="${d.url}" rel="noopener noreferrer">${d.file}</a>`)}</p><p class="muted">Links work for an hour.</p>`
+                  : html`<p class="muted">Download links need the R2_* variables on the web service.</p>`}
+              </div>`
+            : ""}
           ${postable
             ? html`<h2>Posts</h2>
               <div class="card scroll">

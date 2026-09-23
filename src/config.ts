@@ -30,6 +30,8 @@ const sections = {
   notify: z.object({
     // v1 notification channel is a webhook (Slack incoming webhook or similar).
     NOTIFY_WEBHOOK_URL: z.url(),
+    // Optional: the review web app's public URL, linked from notifications.
+    REVIEW_URL: z.url().optional(),
   }),
 } as const;
 

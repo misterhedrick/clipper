@@ -2,7 +2,7 @@
 
 **Start here.** This page says where the project is going, how the whole process will work when it's done, and exactly where it stands today. It's the summary; the detail lives in the docs it links to.
 
-*Last updated: 2026-09-23 · tasks 0–11 built; live checks for 8–9 pending*
+*Last updated: 2026-09-23 · tasks 0–12 built; live checks for 8, 9 and 12 pending*
 
 ---
 
@@ -63,6 +63,8 @@ Claude runs this loop **hourly** as a Claude Code Routine and ends each run with
 | Campaign rules can't be silently dropped | Strict config schema; `autoApprove` must be `false` | ✅ built + tested |
 | Captions include every required phrase, tag and disclosure | `set-caption` validation | ✅ built + tested |
 | Objective checks never claim a pass they can't verify | unknown aspect/duration, overlays, on-screen text → `manual_review_required` | ✅ built + tested |
+| Only approved clips get packaged | `clipper package` needs `approved` *and* a `reviewer:` approval event on record | ✅ built + tested |
+| Problems reach you, once | `attention notify` at the end of every operator run: one digest, each item once per status change, retried if delivery fails | ✅ built + tested (local webhook) |
 | Everything is auditable | `status_events` for status changes, `audit_log` for other writes | ✅ built |
 
 ## 5. Where we are
@@ -83,15 +85,15 @@ Claude runs this loop **hourly** as a Claude Code Routine and ends each run with
 | 9 | Collect clips from OpusClip + objective checks (`candidate upsert`) | ✅ code · ⏳ live check (real clip field names) |
 | 10 | Caption validation + pre-screen + reviewer-requested edits | ✅ |
 | 11 | Review web page (confirm configs, approve clips, record posts) | ✅ |
-| 12 | Ready-to-Post packaging to R2 + notifications | ⏳ next |
-| 13 | Deploy: Render (web + Postgres) + hourly Claude Routine | ⏳ |
+| 12 | Ready-to-Post packaging to R2 + notifications | ✅ code · ⏳ real bucket + webhook |
+| 13 | Deploy: Render (web + Postgres) + hourly Claude Routine | ⏳ next |
 | 14 | End to end on a real campaign, twice (idempotency) | ⏳ |
 
 **Milestone A (Claude can read campaigns) is done.** Claude can scout, add, classify, read briefs, propose configs and choose footage, all through the CLI, with nothing spent.
 
 **Milestone B (clips get made) is built; its live check is pending.** Reserve → submit → collect → check → pre-screen → caption → reviewer-requested edits all work against fixtures. What's left is one real 10-credit run. It's no longer blocked on code: the review page (task 11) can now activate a campaign, so it waits on you joining the campaign and OK'ing the credits (§7).
 
-**Milestone C is half done:** the review page is built (task 11). Packaging and notifications (task 12) are next.
+**Milestone C (review and packages) is built.** The review page (task 11), Ready-to-Post packaging and notifications (task 12) work end to end against a local S3-compatible server and a local webhook. They go live once you create the R2 bucket and the Slack/Discord webhook (§7).
 
 ### Milestones
 
@@ -99,7 +101,7 @@ Claude runs this loop **hourly** as a Claude Code Routine and ends each run with
 |---|---|---|---|
 | **A. Claude can read campaigns** | 3–7 | Scout → brief → config → footage | No · ✅ done |
 | **B. Clips get made** | 8–10 | Submit to OpusClip within budget, collect and pre-screen clips | OpusClip credits · built, live check pending |
-| **C. Review and packages** | 11–12 | Your review page, clip bundles, notifications | Storage (small) · review page ✅, packaging next |
+| **C. Review and packages** | 11–12 | Your review page, clip bundles, notifications | Storage (small) · built, needs your bucket + webhook |
 | **D. Runs itself** | 13–14 | Hosted, scheduled, proven on a real campaign | Hosting |
 
 ### Verified against the real world
@@ -119,17 +121,23 @@ Claude runs this loop **hourly** as a Claude Code Routine and ends each run with
 
 ## 6. What's next
 
-1. **First real test (closes out tasks 8 and 9), as soon as you give the go-ahead in §7.** Run the review page locally (`npm run dev:api`) and confirm the Charlie Berens config. Then an operator run does a 10-minute slice (~10 credits): reserve → submit → collect (`candidate upsert`) → pre-screen → caption. On that first upsert, check the real `opusclip_list_clips` field names and stage values against the parser (`src/modules/candidates/opusclip.ts`), and narrow it to what OpusClip actually sends.
-2. **Task 12:** `candidate record-export`, Ready-to-Post packaging to R2, and notifications. This needs the R2 bucket and webhook from §7.
-3. **Task 13:** deploy to Render and schedule the hourly operator Routine.
+1. **First real test (closes out tasks 8, 9 and 12), once you've done the §7 items.**
+   1. An operator run onboards Charlie Berens: read the brief, `propose-config` → `pending_confirmation`.
+   2. You confirm the config on the review page (`npm run dev:api`).
+   3. The next operator run does a 10-minute slice (~10 credits): reserve → submit → collect (`candidate upsert`) → pre-screen → caption.
+   4. You approve a clip. The operator exports it and runs `clipper package`, and you get the bundle link.
+
+   On the first upsert, check the real `opusclip_list_clips` field names and stage values against the parser (`src/modules/candidates/opusclip.ts`), and narrow it to what OpusClip actually sends.
+2. **Task 13:** deploy to Render (web service + Postgres) and schedule the hourly operator Routine.
+3. **Task 14:** end to end on a real campaign, twice, checking nothing duplicates.
 
 ## 7. Decisions and inputs needed from you
 
 | When | What |
 |---|---|
 | Before the first real test | Join the Charlie Berens campaign on Content Rewards, then OK spending ~10 credits on a 10-minute slice |
+| Before the first real test | A Cloudflare R2 bucket for clip bundles, with a bucket-scoped API token (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`), and a Slack or Discord incoming-webhook URL (`NOTIFY_WEBHOOK_URL`). The code is ready for both. |
 | Before real use | Pick a daily credit budget (placeholder: 120/day ≈ 2 hours of footage; the month's 900 credits ≈ 15 hours) |
-| Milestone C | A Cloudflare R2 bucket for clip bundles, and a Slack/Discord webhook for notifications |
 | Milestone D | A Render account (web service + Postgres) |
 
 ## 8. Known limits (v1)

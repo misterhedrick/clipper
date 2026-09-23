@@ -222,6 +222,9 @@ export const candidateClips = pgTable(
     previewUrl: text("preview_url"),
     thumbnailUrl: text("thumbnail_url"),
     exportUrl: text("export_url"),
+    // Where `clipper package` wrote the Ready-to-Post bundle: an R2 key prefix, e.g. ready-to-post/<campaign>/<clip>/.
+    packageKey: text("package_key"),
+    packagedAt: timestamp("packaged_at", { withTimezone: true }),
     hashtags: text("hashtags"),
     opusclipScore: numeric("opusclip_score"),
     opusclipSubScores: jsonb("opusclip_sub_scores").$type<Record<string, number>>(),
