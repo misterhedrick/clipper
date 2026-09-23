@@ -1,30 +1,51 @@
 # Clip Automation Platform
 
-A campaign-neutral system that discovers creator campaigns on Content Rewards, pulls their public brief and raw footage, and turns that footage into review-ready short-form clips using OpusClip.
+A campaign-neutral system that finds creator campaigns on Content Rewards that it can actually serve, reads their briefs, finds the campaign's long-form footage wherever it's hosted, and turns it into review-ready short-form clips with OpusClip.
 
 The goal is simple:
 
-> Point the system at a Content Rewards campaign → it ingests the brief and footage → generates clips → review → approve → post.
+> Pick a Content Rewards campaign → Claude reads the brief and finds the footage → OpusClip generates clips → Claude pre-screens and drafts captions → you approve → you post.
 
-The system must remove repeated manual work — reading briefs, downloading footage, uploading it somewhere, re-typing requirements — while preserving campaign rules and requiring human approval before anything is published.
+It's run by a **Claude operator**, a scheduled Claude Code session that follows a playbook (`.claude/skills/clipper-operator/`). Claude does the reading and judgment; a small `clipper` CLI and database do everything that must be exact, idempotent or safe. You keep every decision that commits to a campaign, spends credits beyond the budget, or publishes.
+
+> **Status & direction:** see [`docs/ROADMAP.md`](docs/ROADMAP.md) for how the whole process will work, what's built (tasks 0–8, Milestone A done), what's next, and what's needed from you.
 
 **This file is the product spec (what and why).** Before writing code, also read, in order:
 
-1. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — module boundaries, tech stack, repo layout
-2. [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md) — database schema
-3. [`docs/API_CONTRACTS.md`](docs/API_CONTRACTS.md) — exact request/response shapes for Content Rewards, Google Drive/Docs, and OpusClip, verified live during planning
-4. [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) — ordered, checkable implementation tasks for Phase 1
-5. [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — target deployment on Render (web service, background worker, managed Postgres)
+1. [`docs/CAMPAIGN_SURVEY.md`](docs/CAMPAIGN_SURVEY.md): what real Content Rewards campaigns look like, and the evidence behind the design
+2. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): the code / Claude / human split, guardrails, CLI contract, footage source kinds
+3. [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md): database schema (v1–v3 migrations) and `transition()` rules
+4. [`docs/API_CONTRACTS.md`](docs/API_CONTRACTS.md): Content Rewards (verified live), Google Docs/Drive, OpusClip
+5. [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md): ordered, checkable implementation tasks for Phase 1
+6. [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md): Render hosting
+7. [`.claude/skills/clipper-operator/SKILL.md`](.claude/skills/clipper-operator/SKILL.md): the operator playbook Claude follows
 
-Build in the order `BUILD_PLAN.md` lays out — later tasks assume earlier ones already work.
+Build in the order `BUILD_PLAN.md` lays out; later tasks assume earlier ones already work.
+
+## Local development
+
+Requires Node 22+ and a local Postgres.
+
+```bash
+npm install
+cp .env.example .env          # fill in secrets; DATABASE_URL / TEST_DATABASE_URL point at local Postgres
+npm run migrate:dev           # apply migrations to DATABASE_URL
+npm test                      # DB tests run against TEST_DATABASE_URL (wiped on each run) and are skipped if it's unset
+npm run dev:api               # Fastify on PORT: GET /health, and the review web app at / (sign in with your name + REVIEWER_TOKEN)
+npx clipper help              # the operator CLI (JSON in, JSON out)
+```
+
+Schema changes: edit `src/db/schema.ts`, then `npm run db:generate` to produce a new migration.
 
 ## Core Principles
 
 - **Campaign-neutral:** No game, brand, platform, caption, or watermark is hard-coded.
-- **Sourced from public campaign data:** Content Rewards campaign pages, their linked guideline docs, and their linked Drive footage folders are public by design (that's how the campaign owner distributes them to clippers). The platform reads them directly — no OAuth, no impersonation, no private access is required or assumed. If a linked resource ever turns out not to be public, that's a validation failure to report, not something to work around.
+- **Sourced from public campaign data:** Content Rewards campaign pages, their guideline docs, and the footage they link to (Drive, YouTube, Dropbox, Frame.io and more) are public by design; that's how campaign owners distribute them to clippers. The platform reads them anonymously: no OAuth, no impersonation, no private access. If a linked resource turns out not to be public, that's a Needs Attention item for a person, never something to work around.
+- **Claude for judgment, code for guarantees:** Reading briefs, picking footage, and pre-screening clips are Claude's job, following the operator playbook. Dedupe, credit limits, caption requirement checks, and the approval gate are enforced in code so a playbook mistake can't cause harm.
+- **Only campaigns the pipeline can serve:** About 60% of campaigns are long-form → clips work that OpusClip fits. UGC, music-audio and slideshow campaigns are identified during scouting and not onboarded.
 - **Human approval before publishing:** Automation can create, organize, export, and prepare clips, but it must never publicly post a clip without explicit approval.
 - **Configuration over code:** Campaign-specific rules belong in configuration records, not application code — including rules extracted automatically from a campaign's guideline doc.
-- **AI-assisted, human-confirmed configuration:** Requirements parsed out of freeform guideline docs are a draft, not ground truth, until a human confirms them once per campaign.
+- **Claude-drafted, human-confirmed configuration:** Requirements Claude reads out of freeform briefs are a draft, not ground truth, until a human confirms them once per campaign.
 - **Reliable and recoverable:** Every campaign, source video, OpusClip project, candidate clip, review decision, export, and post is tracked.
 - **Idempotent:** Retrying a failed job must not create duplicate OpusClip projects or duplicate clips.
 - **No unnecessary file handling:** The platform never downloads, streams, or stores full video bytes itself. OpusClip ingests directly from the public source URL.
@@ -35,69 +56,63 @@ Build in the order `BUILD_PLAN.md` lays out — later tasks assume earlier ones 
 
 ```mermaid
 flowchart TD
-  A["Campaign published on Content Rewards"] --> B["Register campaign: paste campaign URL"]
-  B --> C["Ingest campaign metadata, guideline doc, Drive footage folder"]
-  C --> D["Extract structured requirements from guideline doc (AI-assisted)"]
-  D --> E{"Human confirms requirements"}
-  E -->|Confirmed| F["Campaign config active"]
-  F --> G["Enumerate source footage in campaign's Drive folder"]
-  G --> H["Validate source and check duplicates"]
-  H --> I["Create OpusClip project via public source URL"]
-  I --> J["Receive candidate clips"]
-  J --> K["Run automated checks"]
-  K --> L{"Human review"}
-  L -->|Approve| M["Export to Ready to Post"]
-  L -->|Needs edits| N["Revise candidate"]
-  L -->|Reject| O["Archive decision"]
-  M --> P["Manual posting"]
-  P --> Q["Track links and performance"]
+  A["Claude scouts Content Rewards campaigns"] --> B{"You pick campaigns to join"}
+  B --> C["Claude reads the brief + linked docs, drafts campaign config"]
+  C --> D{"You confirm the config once"}
+  D --> E["Claude registers footage sources and picks videos"]
+  E --> F["Code validates source, checks credit budget"]
+  F --> G["Claude submits to OpusClip via the connector, with code-issued params"]
+  G --> H["Claude collects clips; code runs objective checks"]
+  H --> I["Claude pre-screens candidates and drafts compliant captions"]
+  I --> J{"You review"}
+  J -->|Approve| K["Code packages export to Ready to Post"]
+  J -->|Needs edits| L["Revise candidate"]
+  J -->|Reject| M["Archive decision"]
+  K --> N["You post manually"]
+  N --> O["Track links and performance"]
 ```
 
 ---
 
 ## Standard Workflow
 
-### 1. Register a campaign
+### 1. Scout and pick campaigns
 
-A user pastes a Content Rewards campaign URL (e.g. `contentrewards.com/discover/{campaign-id}`). The platform resolves the campaign ID and fetches:
+Claude reads the Content Rewards discover listing and each promising campaign's brief, classifies it (long-form → clips, UGC, music, slideshow, unclear), and recommends a short ranked list of long-form campaigns with what each needs from you: join, apply, dedicated page. You join on Content Rewards; that's an account action and stays with a person. Then `clipper campaign add <url>` tracks the campaign.
 
-- Campaign metadata (name, brand, platforms, payout structure, budget) from the discover page's public data
-- The linked Google Doc guideline/brief
-- The linked Google Drive folder containing raw footage and brand assets
+### 2. Read the brief and draft requirements
 
-This replaces manually creating a campaign config from scratch — the platform seeds it from the live campaign.
+Briefs are freeform and spread out: a Google Doc, sub-docs it links to, and the campaign page's reference materials. Claude reads all of it and writes a structured campaign config (duration, aspect ratio, exact caption phrases, required tags, disclosures, hashtag limits), marking each field high or low confidence and listing what the brief doesn't say. It also notes rules the config can't express, like dedicated-page or audience-tier requirements.
 
-### 2. Extract structured requirements
+This is a draft. You review and confirm it once per campaign in the review web app before the campaign goes active.
 
-Guideline docs are freeform prose, not structured data. The platform runs an AI extraction pass over the doc text to populate the same generic campaign config fields as before (aspect ratio, duration bounds, caption rules, required overlays/on-screen text, hashtags, disclosures, posting rules).
+### 3. Find and select footage
 
-This extraction is a draft. A human reviews and confirms it once per campaign before the campaign goes active. Low-confidence fields are flagged explicitly rather than guessed silently. A campaign's config stores which fields were AI-extracted vs. human-set, and when it was confirmed.
+Footage links sit in the campaign's reference materials and inside the brief. They point to Drive folders, YouTube channels, Dropbox, Frame.io, files uploaded to Content Rewards, and sometimes hosts OpusClip can't read (Kick, MediaSilo, custom portals). Claude registers the footage locations, then uses `clipper footage list-url` to see what's inside and picks what to process:
 
-### 3. Enumerate source footage
+- In mixed folders it picks raw footage (`Raw to edit`, `Un-Edited Clips`, full episodes) over b-roll, finished edits, logos and stills.
+- On YouTube channels it applies the brief's content filter ("only videos with 1win merch").
+- Every select **and** skip is recorded with a reason, so later runs only look at new files.
 
-Instead of watching an intake folder for manually dropped files, the platform lists the files already present in the campaign's public Drive folder. Each file becomes a candidate source job the first time it's seen.
-
-The folder is polled periodically for new files (Content Rewards campaigns add footage over time), the same way a Drive-intake watcher would in a private-upload model — just pointed at a folder the platform doesn't own.
+Unsupported hosts become a Needs Attention item for you.
 
 ### 4. Validate the source
 
-Before creating anything in OpusClip:
+Before creating anything in OpusClip, code checks:
 
-- File is an accepted video type: MP4, MOV, or MKV
-- File is not empty or corrupted (as far as metadata can tell)
-- File belongs to an active, confirmed campaign
-- File has not already been processed (see Duplicate prevention)
-- File does not exceed OpusClip's limits (10 hours / 30 GB) or the campaign's configured limits
-- The source URL is publicly reachable (pre-flight check) before it's handed to OpusClip
-- Sufficient OpusClip credits are available
+- The host is one OpusClip ingests, and the URL is publicly reachable
+- The file isn't already processed for this campaign (dedupe on a stable source key such as the Drive file ID or YouTube video ID)
+- Size/duration are within OpusClip limits (10 hours / 30 GB) and the campaign's limits
+- The campaign is active and confirmed
+- The daily and per-campaign credit budgets, and OpusClip's remaining monthly credits, allow it
 
-If validation fails, the job is marked **Needs Attention** with a clear reason. It must not silently disappear or retry forever.
+If validation fails, the job goes to **Needs Attention** with a clear reason. It never silently disappears or retries forever.
 
 ### 5. Hand off to OpusClip
 
-OpusClip's API ingests video by URL (`POST /api/clip-projects` with a `videoUrl` field), and Google Drive links are an explicitly supported source alongside YouTube, Dropbox, and S3. The platform simply submits the public Drive file link — it does not download, stream, or re-host the video itself.
+OpusClip's API ingests video by URL (`POST /api/clip-projects` with `videoUrl`) from YouTube, Google Drive, Dropbox, Frame.io, Loom, Vimeo, Twitch and public S3 MP4 links. The platform submits the public link; it never downloads, streams or re-hosts source video.
 
-This means there is no upload worker, no resumable/chunked transfer, and no local storage of source video. The only failure modes to handle here are request-level: OpusClip rejecting the URL, the request timing out, or (more likely in practice) Google Drive's anonymous-download abuse quota temporarily rejecting the fetch on a heavily-shared file. Both are treated as retryable, not permanent, failures.
+The only failure modes are request-level: OpusClip rejecting the URL, a timeout, or a host temporarily throttling a heavily-shared file (Google Drive's anonymous-download quota). Throttling and timeouts are retried; a rejected URL is not.
 
 ### 6. Generate candidate clips
 
@@ -107,7 +122,7 @@ For each candidate, store:
 
 - Internal clip ID
 - Campaign ID
-- Source file ID (Drive file ID)
+- Source key (e.g. `gdrive:{fileId}`, `youtube:{videoId}`)
 - OpusClip project ID
 - OpusClip clip ID (`{project_id}.{curation_id}`)
 - Title/hook
@@ -155,7 +170,9 @@ A reviewer sees an **Awaiting Review** queue with:
 - Duration
 - Proposed caption/hashtags
 - Automated check results
-- Requirement checklist (including which requirements were AI-extracted vs. human-confirmed)
+- Claude's pre-screen verdict and notes (advisory)
+- Claude's caption draft, already validated against the required phrases, tags and disclosures
+- Requirement checklist (including which requirements were Claude-drafted vs. human-confirmed)
 - Notes and edit history
 
 The reviewer can choose:
@@ -222,12 +239,15 @@ status: draft # draft -> active once requirements are confirmed
 source:
   content_rewards_campaign_url: https://contentrewards.com/discover/example-campaign-id
   content_rewards_campaign_id: example-campaign-id
+  campaign_type: lf   # lf | ugc | music | slideshow | unclear; only lf is onboarded
   guideline_doc_url: https://docs.google.com/document/d/.../edit
-  drive_folder_url: https://drive.google.com/drive/folders/...
-  accepted_extensions:
-    - mp4
-    - mov
-    - mkv
+  footage_sources:    # registered by Claude, each with a reason
+    - kind: gdrive_folder
+      url: https://drive.google.com/drive/folders/...
+      label: Raw to edit, full podcast episodes
+    - kind: youtube_channel
+      url: https://www.youtube.com/@creator
+      label: Only videos with sponsor merch (brief rule)
   max_file_size_mb: 30000 # OpusClip hard limit is 30 GB
   max_duration_hours: 10   # OpusClip hard limit
 
@@ -335,8 +355,8 @@ Every incoming source needs a stable identity.
 
 Use:
 
-- Google Drive file ID as the primary source ID
-- File checksum (Drive's `md5Checksum`, reliably available for binary video files)
+- A source key that is stable across however the file was found: `gdrive:{fileId}`, `youtube:{videoId}`, or a hash of the share URL for other hosts
+- File checksum where the host exposes one (Drive's `md5Checksum`)
 - Campaign ID
 - Original file size and name
 
@@ -349,7 +369,7 @@ A retry must continue the existing job whenever possible rather than creating a 
 Retry only failures likely to be temporary:
 
 - Network timeout
-- Temporary Google Drive API error
+- Temporary footage-host error (Drive, YouTube, Dropbox listing)
 - Google Drive anonymous-download quota rejection ("too many users have viewed or downloaded this file recently")
 - Temporary OpusClip API error or rate limit (30 requests/minute per key)
 - Webhook delivery failure (fall back to polling `get-clips`)
@@ -389,85 +409,21 @@ Before starting a project:
 
 ---
 
-## Suggested Architecture
+## Architecture
 
-```mermaid
-flowchart LR
-  CR["Content Rewards Campaign Page"] --> CC["Campaign Connector"]
-  CC --> MD["Metadata (public JSON)"]
-  CC --> GD["Guideline Doc (public)"]
-  CC --> DF["Drive Folder (public)"]
-  GD --> RE["Requirements Extractor (AI-assisted)"]
-  RE --> HC{"Human confirms"}
-  HC --> CFG["Campaign Config"]
-  DF --> FE["Footage Enumerator"]
-  FE --> Q["Job Queue"]
-  CFG --> Q
-  Q --> PC["Project Creator (submits videoUrl)"]
-  PC --> OC["OpusClip API"]
-  OC --> PM["Project Monitor (poll + webhook)"]
-  PM --> CS["Compliance / Candidate Service"]
-  CS --> RQ["Review Queue"]
-  RQ --> RP["Ready to Post storage"]
-  RQ --> T["Tracker (database)"]
-```
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). In short:
 
-### Components
-
-#### Campaign connector
-
-Responsible for turning a Content Rewards campaign URL into three artifacts: metadata, guideline doc reference, footage folder reference. Resolves the campaign ID and fetches the discover page's embedded campaign data.
-
-#### Requirements extractor
-
-Responsible for parsing the guideline doc's freeform text into the structured campaign config fields. Flags low-confidence extractions. Produces a draft config, never an active one — a human must confirm before the campaign is used.
-
-#### Footage enumerator
-
-Responsible for listing files in the campaign's Drive folder and detecting new ones on subsequent polls. Replaces the private-intake Drive watcher.
-
-#### Job queue
-
-Responsible for reliable background processing, decoupling footage detection from project creation.
-
-#### Project creator
-
-Responsible for validating a source, running the pre-flight reachability check, and submitting the `videoUrl` to OpusClip's create-project endpoint. No file transfer happens here — this is a thin API call plus bookkeeping.
-
-#### Project monitor
-
-Responsible for checking project status and retrieving generated clips via `get-clips`. Prefers the OpusClip webhook when reliable, falls back to polling.
-
-#### Compliance service
-
-Responsible for objective checks, campaign rule evaluation, and creation of the review package.
-
-#### Review interface
-
-Responsible for showing candidates, previews, checklists, and approve/reject/edit decisions. A first version can be a simple internal page or spreadsheet-backed view; a later version can be a dedicated dashboard.
-
-#### Tracker
-
-Responsible for campaign, source, project, clip, review, post, and performance records. Needs real transactional guarantees (a proper database, not a spreadsheet) given the idempotency and duplicate-detection requirements above.
+- **Code** (`clipper` CLI + Postgres): Content Rewards parsing, footage listing, the credit ledger that must approve every OpusClip submission (enforced by a hook), objective checks, caption validation, packaging to R2, notifications, the audit log.
+- **Claude operator** (Claude Code Routine following `.claude/skills/clipper-operator/`, with the OpusClip connector): scouting, brief reading, config drafting, footage selection, submitting to OpusClip and collecting clips, transcript-based pre-screen, caption drafting, reviewer-requested clip fixes, Needs Attention triage.
+- **You** (review web app): join campaigns, confirm configs, approve clips, post, record results.
 
 ---
 
 ## Recommended Build Phases
 
-### Phase 1 — Reliable ingestion and review
+### Phase 1 — Operator loop, ingestion and review
 
-Build:
-
-- Campaign connector (URL → metadata + guideline doc + Drive folder references)
-- Requirements extractor with human confirmation step
-- Footage enumerator (polling the campaign's Drive folder)
-- Project creator (submit `videoUrl` to OpusClip, no upload worker)
-- Candidate retrieval (`get-clips`, polling)
-- Tracker (real database)
-- Awaiting Review queue
-- Manual approval
-- HD export to Ready to Post
-- Failure reporting and Needs Attention alerts (notify a human, don't just log)
+The ordered task list is in [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md): the `clipper` CLI, brief reading, footage sources, OpusClip submit/sync with a credit budget, caption validation, the review web app, packaging, notifications, and the operator Routine.
 
 Do not build automated social posting yet.
 
@@ -510,6 +466,8 @@ Only after the workflow is stable:
 - No automatic public posting
 - No hard-coded campaign/client/game rules
 - No OAuth/service-account access to campaign source data (it's public; don't build access we don't need)
+- No onboarding of UGC, music-audio or slideshow campaigns (OpusClip doesn't fit them)
+- No Claude path to approving clips, activating campaigns, joining campaigns or posting
 - No silent retries or silent failures
 - No automatic approval based only on AI scoring
 - No trusting AI-extracted requirements without a human confirmation step
@@ -519,18 +477,18 @@ Only after the workflow is stable:
 
 ## Initial Definition of Done
 
-The first usable version is complete when a user can:
+The first usable version is complete when:
 
-1. Paste a Content Rewards campaign URL.
-2. Have the platform pull metadata, guideline doc, and footage folder automatically.
-3. Review and confirm the AI-extracted requirements once.
-4. Have the platform detect footage in the campaign's Drive folder and create exactly one job per file.
-5. Have the platform hand each source off to OpusClip by URL, with no manual download/upload.
-6. Receive generated candidates in an Awaiting Review queue.
-7. Approve one candidate.
-8. Receive an HD export, caption package, and tracker entry in Ready to Post.
-9. See clear errors for every failure state.
-10. Register a second campaign and have it work without changing application code.
+1. Claude scouts Content Rewards and recommends long-form campaigns, with UGC/music/slideshow ones filtered out.
+2. After you add one, Claude reads its brief (including linked docs) and proposes a config.
+3. You confirm the config once in the review web app.
+4. Claude registers the campaign's footage and selects videos with recorded reasons, whether the footage is in a Drive folder, on a YouTube channel, or elsewhere.
+5. Code submits each selected video to OpusClip by URL, exactly once, within the credit budget.
+6. Candidates arrive in the review queue with objective checks, Claude's pre-screen, and a validated caption draft.
+7. You approve one candidate.
+8. An HD export, caption file and tracker entry land in Ready to Post.
+9. Every failure shows up as a clear Needs Attention item, and the operator's run report tells you what needs you.
+10. A second campaign on a different footage host works without changing application code.
 
 ---
 
@@ -550,4 +508,5 @@ When using AI to build this project:
 - Never attempt to access a campaign resource that isn't actually public — if a guideline doc or footage folder requires sign-in, that's a validation failure to surface, not a wall to climb.
 - Require explicit human approval before a clip becomes Ready to Post.
 - Do not add automatic social posting unless it is explicitly requested later.
+- Put judgment in the operator playbook and guarantees in code. When a new step needs reading or deciding, extend `.claude/skills/clipper-operator/`; when it must be exact or safe, add a `clipper` CLI command and enforce it there. Never give the CLI a command that approves, activates or posts.
 - Build tests around campaign ingestion, requirements extraction/confirmation, status transitions, duplicate detection, retries, and failure recovery.

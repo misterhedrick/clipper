@@ -1,0 +1,47 @@
+{
+  "name": "clipper",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Campaign-neutral clip automation platform: Content Rewards campaigns -> OpusClip candidates -> human review -> Ready to Post.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "dev:api": "tsx watch src/server.ts",
+    "start:api": "node dist/server.js",
+    "start:render": "node dist/db/migrate.js && node dist/server.js",
+    "db:generate": "drizzle-kit generate",
+    "migrate": "node dist/db/migrate.js",
+    "migrate:dev": "tsx src/db/migrate.ts",
+    "test": "vitest run",
+    "clipper": "node --import tsx src/cli/index.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/misterhedrick/clipper.git"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1138.0",
+    "@aws-sdk/lib-storage": "^3.1138.0",
+    "@aws-sdk/s3-request-presigner": "^3.1138.0",
+    "dotenv": "^18.0.3",
+    "drizzle-orm": "^0.45.3",
+    "fastify": "^5.12.5",
+    "pg": "^8.23.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.11",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  },
+  "bin": {
+    "clipper": "bin/clipper"
+  }
+}

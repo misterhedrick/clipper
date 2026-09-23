@@ -1,0 +1,36 @@
+{
+  "project_id": "P123",
+  "stage": "COMPLETE",
+  "clips": [
+    {
+      "clip_id": "P123.c1",
+      "rank": 1,
+      "title": "The one-shot nobody saw coming",
+      "description": "Clutch final round",
+      "hashtags": ["#mw4", "#cod"],
+      "duration_ms": 32000,
+      "score": 92,
+      "sub_scores": { "hook": 9.1, "coherence": 8.4, "connection": 7.9, "trend": 6.5 },
+      "preview_url": "https://cdn.opus.pro/P123/c1/preview.mp4",
+      "thumbnail_url": "https://cdn.opus.pro/P123/c1/thumb.jpg",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "clip_id": "P123.c2",
+      "rank": 2,
+      "title": "Landscape by mistake",
+      "hashtags": "#mw4",
+      "duration_ms": 28000,
+      "score": 81,
+      "preview_url": "https://cdn.opus.pro/P123/c2/preview.mp4",
+      "aspect_ratio": "16:9"
+    },
+    {
+      "clip_id": "P123.c3",
+      "rank": 3,
+      "title": "Too short",
+      "duration_ms": 9000,
+      "score": 70
+    }
+  ]
+}

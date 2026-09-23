@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+ <title>Example Creator</title>
+ <entry>
+  <id>yt:video:AAAAAAAAAAA</id>
+  <yt:videoId>AAAAAAAAAAA</yt:videoId>
+  <title>Short: best moment &amp; reaction #shorts</title>
+  <link rel="alternate" href="https://www.youtube.com/shorts/AAAAAAAAAAA"/>
+  <published>2026-09-22T23:58:22+00:00</published>
+  <media:group><media:description></media:description><media:community><media:statistics views="38"/></media:community></media:group>
+ </entry>
+ <entry>
+  <id>yt:video:BBBBBBBBBBB</id>
+  <yt:videoId>BBBBBBBBBBB</yt:videoId>
+  <title>Full podcast episode 42 (with 1win merch)</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=BBBBBBBBBBB"/>
+  <published>2026-09-20T12:00:00+00:00</published>
+  <media:group><media:description>Two hours with the crew. Sponsored by 1win.</media:description><media:community><media:statistics views="12045"/></media:community></media:group>
+ </entry>
+</feed>

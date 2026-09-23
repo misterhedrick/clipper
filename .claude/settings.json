@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "deny": [
+      "mcp__OpusClip__opusclip_create_post_task",
+      "mcp__OpusClip__opusclip_schedule_publish",
+      "mcp__OpusClip__opusclip_unschedule_publish",
+      "mcp__OpusClip__opusclip_share_project"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__OpusClip__opusclip_submit_project",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-opusclip-submit.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start.sh",
+            "timeout": 300
+          }
+        ]
+      }
+    ]
+  }
+}
