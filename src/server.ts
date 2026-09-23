@@ -22,7 +22,7 @@ try {
 } catch (err) {
   if (!(err instanceof ConfigError)) throw err;
 }
-const app = buildApp({ db, reviewerToken: config.REVIEWER_TOKEN, bundles, trustProxyHops: config.TRUST_PROXY_HOPS });
+const app = buildApp({ db, reviewerToken: config.REVIEWER_TOKEN, bundles, trustProxyHops: config.TRUST_PROXY_HOPS, operatorToken: config.OPERATOR_TOKEN });
 
 const shutdown = async () => {
   await app.close();

@@ -37,6 +37,8 @@ export type CommandContext = {
   env: NodeJS.ProcessEnv;
   /** Bundle storage override (tests); commands otherwise build the R2 store from config. */
   bundleStore?: BundleStore;
+  /** False when the command came in over HTTPS: file arguments must arrive as stdin, never as server paths. */
+  allowFilePaths: boolean;
 };
 
 export type Command = {
@@ -66,6 +68,8 @@ export type RunDeps = {
   connector?: ConnectorDeps;
   stdin?: () => Promise<string>;
   bundleStore?: BundleStore;
+  /** Set by the operator endpoint: the command came from a remote client (see src/cli/remote.ts). */
+  remote?: boolean;
 };
 
 export type RunResult = { exitCode: number; output: unknown };
@@ -125,6 +129,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<RunResult
     stdin: deps.stdin ?? readStdin,
     env: deps.env ?? process.env,
     bundleStore: deps.bundleStore,
+    allowFilePaths: !deps.remote,
   };
 
   try {
@@ -180,6 +185,8 @@ export function requiredOption(ctx: CommandContext, name: string): string {
 /** Reads --file as text (`-` reads stdin). */
 export async function readTextInput(ctx: CommandContext, file: string): Promise<string> {
   if (file === "-") return ctx.stdin();
+  // A remote command never gets to name a file on the server.
+  if (!ctx.allowFilePaths) throw new UsageError("Remote commands take file contents on stdin (--file -), not server paths");
   return readFile(file, "utf8").catch(() => {
     throw new UsageError(`Can't read --file ${file}`);
   });
