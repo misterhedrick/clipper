@@ -101,10 +101,11 @@ Content Rewards URL → metadata + reference materials. Live canary test: `RUN_N
   - **Notifications:** `attention notify` sends one digest (Slack `{text}` or Discord `{content}`, detected from the URL) of failed/flagged jobs and campaigns plus configs waiting over 24h. It records each item as notified for its current status event only after delivery succeeds, so the same failure isn't re-sent every run, a new one is, and a failed delivery is retried next run. The playbook runs it at the end of every operator run.
   - **Done-when:** a forced validation failure (Drive sign-in wall) was delivered to a local webhook receiver; bundle and refusal checks pass. **Pending live:** a real R2 bucket and a real Slack/Discord webhook (you provide both), and a real OpusClip export URL from the first live test.
 
-## 13. Operator deployment ⏳ in progress
+## 13. Operator deployment ✅ done
 - Render: web service (review app + `/health`) and Postgres only. No worker, no cron.
 - Claude operator runs are started by hand in a Claude Code cloud session on this repo (no scheduled Routine, decided 2026-09-23), running the `clipper-operator` skill with the OpusClip connector attached and `CLIPPER_OPERATOR_TOKEN` in the environment (commands run on Render, which holds `OPUSCLIP_DAILY_CREDIT_BUDGET` and `NOTIFY_WEBHOOK_URL`). The project `.claude/settings.json` (submit guard hook, denied posting tools) must be active there. Verify by attempting a forbidden call in a dry run and seeing it refused.
 - **Done when:** a manual run completes the loop on an empty queue and posts a "nothing needs you" report, and a deliberately unreserved submit in that environment is blocked by the hook.
+- **Verified 2026-09-23:** a manual cloud run on the empty live database produced "Needs you: nothing" (0 campaigns/jobs/candidates, OpusClip usage reconciled 0/900); the guard hook blocked an unreserved submit live the same day. `attention notify` and `notify` refuse until `NOTIFY_WEBHOOK_URL` is set on Render (task 12's pending webhook), so the report was returned in the session only.
 
 ## 14. End-to-end on a real campaign
 - Pick an LF campaign with a public Drive folder of full-length footage (survey #23 Charlie Berens is a good candidate). Scout → add → onboard → confirm → source → reserve/submit → collect → pre-screen → approve → export → package → Ready to Post. Start with a range-limited submit, then a full video.

@@ -86,7 +86,7 @@ You start this loop **by hand** ("do an operator run" in a Claude Code session; 
 | 10 | Caption validation + pre-screen + reviewer-requested edits | ✅ |
 | 11 | Review web page (confirm configs, approve clips, record posts) | ✅ |
 | 12 | Ready-to-Post packaging to R2 + notifications | ✅ code · ⏳ real bucket + webhook |
-| 13 | Deploy: Render web (free) + Supabase Postgres (free) + manual Claude operator runs | ⏳ review page **live**; operator remote mode **live and verified from a cloud session** (`CLIPPER_OPERATOR_TOKEN` set, daily budget 120); no Routine by decision; one manual empty-queue run left |
+| 13 | Deploy: Render web (free) + Supabase Postgres (free) + manual Claude operator runs | ✅ review page **live**; operator remote mode **live** (`CLIPPER_OPERATOR_TOKEN` set, daily budget 120); no Routine by decision; manual empty-queue run done 2026-09-23 (report: "Needs you: nothing"; posting it waits on the webhook, task 12) |
 | 14 | End to end on a real campaign, twice (idempotency) | ⏳ |
 
 **Milestone A (Claude can read campaigns) is done.** Claude can scout, add, classify, read briefs, propose configs and choose footage, all through the CLI, with nothing spent.
@@ -119,17 +119,18 @@ You start this loop **by hand** ("do an operator run" in a Claude Code session; 
 | MW4 (Call of Duty) | `pending_confirmation` | Real caption rules drafted. **Footage is on MediaSilo, which OpusClip can't read**, and the campaign is paused on Content Rewards. |
 | Charlie Berens | `discovered`, classified long-form | Drive folder registered; one full special selected. **Best first real test.** |
 
+The **live database (Supabase) is empty** as of 2026-09-23: no campaigns, jobs or candidates. The rows above are local only, so the first real test starts by re-adding Charlie Berens through an operator run.
+
 ## 6. What's next
 
 1. **First real test (closes out tasks 8, 9 and 12), once you've done the §7 items.**
-   1. An operator run onboards Charlie Berens: read the brief, `propose-config` → `pending_confirmation`.
+   1. An operator run adds and onboards Charlie Berens on the live database: read the brief, `propose-config` → `pending_confirmation`.
    2. You confirm the config on the review page (`npm run dev:api`).
    3. The next operator run does a 10-minute slice (~10 credits): reserve → submit → collect (`candidate upsert`) → pre-screen → caption.
    4. You approve a clip. The operator exports it and runs `clipper package`, and you get the bundle link.
 
    On the first upsert, check the real `opusclip_list_clips` field names and stage values against the parser (`src/modules/candidates/opusclip.ts`), and narrow it to what OpusClip actually sends.
-2. **Task 13: one manual operator run on the empty queue.** The review page is live, the operator reaches the database through it over HTTPS (`CLIPPER_OPERATOR_TOKEN`; `DEPLOYMENT.md` § The Claude operator), and the guard hook already blocked an unreserved submit live. No Routine: runs are started by hand. What's left is one run that reports "nothing needs you".
-3. **Task 14:** end to end on a real campaign, twice, checking nothing duplicates.
+2. **Task 14:** end to end on a real campaign, twice, checking nothing duplicates.
 
 ## 7. Decisions and inputs needed from you
 
