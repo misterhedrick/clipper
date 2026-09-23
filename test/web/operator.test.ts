@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { buildApp } from "../../src/app.js";
-import { prepareArgv, runRemote } from "../../src/cli/remote.js";
+import { DEFAULT_REMOTE_URL, prepareArgv, remoteTarget, runRemote } from "../../src/cli/remote.js";
 import { createDb, type Db } from "../../src/db/client.js";
 import { campaigns, candidateClips, sourceJobs, statusEvents } from "../../src/db/schema.js";
 import { transition } from "../../src/db/transition.js";
@@ -26,6 +26,16 @@ describe("prepareArgv", () => {
     expect(await prepareArgv(["candidate", "upsert", "j", "--file", "-"])).toMatchObject({ needsStdin: true, stdin: undefined });
     expect(await prepareArgv(["guard", "submit"])).toMatchObject({ needsStdin: true });
     await expect(prepareArgv(["candidate", "upsert", "j", "--file", join(dir, "missing.json")])).rejects.toThrow(/Can't read --file/);
+  });
+});
+
+describe("remoteTarget", () => {
+  it("turns on with the operator token, defaulting to the deployed app", () => {
+    expect(remoteTarget({})).toBeUndefined();
+    expect(remoteTarget({ CLIPPER_OPERATOR_TOKEN: "t" })).toEqual({ url: DEFAULT_REMOTE_URL, token: "t" });
+    expect(remoteTarget({ CLIPPER_OPERATOR_TOKEN: "t", CLIPPER_REMOTE_URL: "https://other.example" })).toEqual({ url: "https://other.example", token: "t" });
+    // A URL without a token still goes remote (and gets a clear auth error) rather than silently using a local DB.
+    expect(remoteTarget({ CLIPPER_REMOTE_URL: "https://other.example" })).toEqual({ url: "https://other.example", token: "" });
   });
 });
 

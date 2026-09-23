@@ -43,7 +43,7 @@ Reviewers sign in at the service's URL with their name and `REVIEWER_TOKEN` (at 
 
 A Claude Code Routine on this repository that runs the `clipper-operator` skill hourly and on demand.
 
-**How it reaches the database.** Claude Code cloud sessions reach the internet only through an HTTPS egress proxy. Tested 2026-09-23: a Postgres connection to Supabase's pooler opens a tunnel but never completes (the standard handshake times out; Postgres 17's direct TLS is reset), and any Postgres host would behave the same. So the operator doesn't use `DATABASE_URL`. With `CLIPPER_REMOTE_URL` set, the `clipper` CLI (`src/cli/remote.ts`) sends each command to the review app's `POST /operator/run` (`src/web/operator.ts`), which runs it through the same `run()` against the database:
+**How it reaches the database.** Claude Code cloud sessions reach the internet only through an HTTPS egress proxy. Tested 2026-09-23: a Postgres connection to Supabase's pooler opens a tunnel but never completes (the standard handshake times out; Postgres 17's direct TLS is reset), and any Postgres host would behave the same. So the operator doesn't use `DATABASE_URL`. With `CLIPPER_OPERATOR_TOKEN` set, the `clipper` CLI (`src/cli/remote.ts`) sends each command to the review app's `POST /operator/run` (`src/web/operator.ts`), which runs it through the same `run()` against the database:
 
 - **Same rules.** The server always acts as `claude-operator`, so `transition()` and the review module refuse approvals, activations and posts exactly as they do locally, and there's still no approve command.
 - **Separate secret.** `OPERATOR_TOKEN` on the server = `CLIPPER_OPERATOR_TOKEN` in the Routine. It isn't `REVIEWER_TOKEN`: holding it lets you operate, never review. The endpoint only exists when `OPERATOR_TOKEN` is set.
@@ -58,7 +58,7 @@ Because commands now run on Render, **their configuration lives on Render too**:
 
 The Routine's environment needs:
 - **The OpusClip connector** attached (Pro plan; the org is fixed at connect time, so connect the right one).
-- **`CLIPPER_REMOTE_URL=https://clipper-review.onrender.com` and `CLIPPER_OPERATOR_TOKEN`.** No database or R2 credentials.
+- **`CLIPPER_OPERATOR_TOKEN`** (the Render service's `OPERATOR_TOKEN`). That's the only setting: the app's URL is built in (`DEFAULT_REMOTE_URL`); set `CLIPPER_REMOTE_URL` only to point somewhere else. No database or R2 credentials.
 - **Network access** to the Render app, OpusClip, and (for the connector's own work) whatever it needs.
 - **Dependencies installed.** The SessionStart hook runs `npm ci` in a fresh checkout, so `npx clipper` works.
 - **This repo's `.claude/settings.json` in force.** It holds the submit guard hook and the denied posting/sharing tools. Check this in the Routine's environment before relying on it.

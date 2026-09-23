@@ -128,7 +128,7 @@ Claude runs this loop **hourly** as a Claude Code Routine and ends each run with
    4. You approve a clip. The operator exports it and runs `clipper package`, and you get the bundle link.
 
    On the first upsert, check the real `opusclip_list_clips` field names and stage values against the parser (`src/modules/candidates/opusclip.ts`), and narrow it to what OpusClip actually sends.
-2. **Task 13: schedule the operator Routine.** The review page is live, and the operator reaches the database through it over HTTPS (`CLIPPER_REMOTE_URL`; `DEPLOYMENT.md` § The Claude operator). What's left is creating the hourly Routine with the OpusClip connector and checking the done-when: a run on an empty queue reports "nothing needs you", and an unreserved submit is blocked.
+2. **Task 13: schedule the operator Routine.** The review page is live, and the operator reaches the database through it over HTTPS (`CLIPPER_OPERATOR_TOKEN`; `DEPLOYMENT.md` § The Claude operator). What's left is creating the hourly Routine with the OpusClip connector and checking the done-when: a run on an empty queue reports "nothing needs you", and an unreserved submit is blocked.
 3. **Task 14:** end to end on a real campaign, twice, checking nothing duplicates.
 
 ## 7. Decisions and inputs needed from you
@@ -138,7 +138,7 @@ Claude runs this loop **hourly** as a Claude Code Routine and ends each run with
 | Before the first real test | Join the Charlie Berens campaign on Content Rewards, then OK spending ~10 credits on a 10-minute slice |
 | Before the first real test | A Cloudflare R2 bucket for clip bundles, with a bucket-scoped API token (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`), and a Slack or Discord incoming-webhook URL (`NOTIFY_WEBHOOK_URL`). The code is ready for both. |
 | Before real use | Pick a daily credit budget (placeholder: 120/day ≈ 2 hours of footage; the month's 900 credits ≈ 15 hours) |
-| Now (task 13) | In the Claude cloud environment's settings, add `CLIPPER_REMOTE_URL=https://clipper-review.onrender.com` and `CLIPPER_OPERATOR_TOKEN` (copy `OPERATOR_TOKEN` from Render → clipper-review → Environment). Pick the daily credit budget (Render: `OPUSCLIP_DAILY_CREDIT_BUDGET`). Then OK scheduling the hourly Routine. |
+| Now (task 13) | In the Claude cloud environment's settings, add `CLIPPER_OPERATOR_TOKEN` (copy `OPERATOR_TOKEN` from Render → clipper-review → Environment); the app URL is built in. Pick the daily credit budget (Render: `OPUSCLIP_DAILY_CREDIT_BUDGET`). Then OK scheduling the hourly Routine. |
 
 ## 8. Known limits (v1)
 
