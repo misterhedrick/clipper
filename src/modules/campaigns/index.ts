@@ -236,12 +236,10 @@ export async function scoutCampaigns(ctx: Ctx, opts: { all?: boolean } = {}) {
  * materials. `docUrl` reads a sub-doc the brief links to instead of the main one.
  */
 export async function readCampaignBrief(ctx: Ctx & { reader?: ReaderDeps }, ref: string, docUrl?: string) {
-  const c = await resolveCampaign(ctx.db, ref);
-  const snapshot = (c.crSnapshot ?? {}) as { referenceMaterials?: { type: string | null; url: string }[] };
-  const referenceMaterials = snapshot.referenceMaterials ?? [];
-  const campaign = { id: c.id, title: c.title, status: c.status, campaignType: c.campaignType };
+  const source = await briefSource(ctx, ref);
+  const { campaign, referenceMaterials } = source;
 
-  const target = docUrl ?? c.guidelineDocUrl;
+  const target = docUrl ?? source.guidelineDocUrl;
   if (!target) {
     return {
       campaign,
@@ -254,4 +252,29 @@ export async function readCampaignBrief(ctx: Ctx & { reader?: ReaderDeps }, ref:
   const doc = await readGoogleDoc(target, ctx.reader);
   const linkedDocs = doc.links.filter((l) => parseGoogleDocUrl(l.url) && parseGoogleDocUrl(l.url) !== doc.docId);
   return { campaign, doc, referenceMaterials, linkedDocs };
+}
+
+/**
+ * A tracked campaign's stored snapshot, or, for scouting, a live read-only lookup
+ * of an untracked Content Rewards campaign (nothing is written).
+ */
+async function briefSource(ctx: Ctx, ref: string) {
+  try {
+    const c = await resolveCampaign(ctx.db, ref);
+    const snapshot = (c.crSnapshot ?? {}) as { referenceMaterials?: { type: string | null; url: string }[] };
+    return {
+      campaign: { id: c.id, tracked: true, title: c.title, status: c.status, campaignType: c.campaignType },
+      guidelineDocUrl: c.guidelineDocUrl,
+      referenceMaterials: snapshot.referenceMaterials ?? [],
+    };
+  } catch (err) {
+    if (!(err instanceof CampaignsError && err.code === "not_found")) throw err;
+    const url = UUID.test(ref.trim()) ? `https://contentrewards.com/discover/${ref.trim()}` : ref;
+    const m = await fetchCampaign(url, ctx.connector);
+    return {
+      campaign: { id: null, tracked: false, contentRewardsCampaignId: m.campaignId, title: m.title, contentRewardsStatus: m.sourceStatus },
+      guidelineDocUrl: m.guidelineDocUrl,
+      referenceMaterials: m.referenceMaterials,
+    };
+  }
 }

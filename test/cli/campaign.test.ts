@@ -135,6 +135,13 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper campaign …", () => {
     expect(sub.doc.docId).toBe("SUBDOC789");
   });
 
+  it("brief works read-only on an untracked campaign, for scouting", async () => {
+    const res = await cli("campaign", "brief", `https://contentrewards.com/discover/${MW4}`);
+    expect(res.exitCode).toBe(0);
+    expect(res.output).toMatchObject({ campaign: { tracked: false, contentRewardsCampaignId: MW4 }, doc: { docId: expect.any(String) } });
+    expect(await db.select().from(campaigns)).toHaveLength(0); // nothing written
+  });
+
   it("brief reports a private doc as not_public and a campaign without a doc as doc: null", async () => {
     await cli("campaign", "add", `https://contentrewards.com/discover/${MW4}`);
     const priv = await cli("campaign", "brief", MW4, "--doc", "https://docs.google.com/document/d/PRIVATE/edit");

@@ -3,7 +3,7 @@
 Goal: recommend campaigns worth running through this pipeline. A person decides which to join. Joining happens on Content Rewards under their account.
 
 1. `clipper campaign scout` lists discover-page campaigns not yet tracked, with parsed metadata.
-2. For each plausible one, `clipper campaign brief <url-or-id>` reads the actual brief. Titles are unreliable.
+2. For each plausible one, `clipper campaign brief <contentRewardsUrl>` reads the actual brief. It works on untracked campaigns and writes nothing. Titles are unreliable.
 3. Classify it. Only **LF** fits this pipeline:
    - **lf**: long-form footage exists (stream VODs, podcasts, specials, gameplay recordings, a creator's channel) and the job is cutting it into shorts.
    - **ugc**: the clipper films or records original content (persona pages, own gameplay, split-screen reactions).
