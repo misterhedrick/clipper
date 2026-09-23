@@ -37,10 +37,11 @@ Content Rewards URL → metadata + reference materials. Live canary test: `RUN_N
 - **Done when:** for survey campaigns #25 (PULP) and #39 (Ryan Zofay), the output includes the Drive folder links that plain-text export drops.
 - **Outcome:** verified live, including that PULP's text export lacks its `PULP Assets Folder` link while `brief` shows it inline. The text renders every link as `words <url>`, so Claude sees what each link is called (`VIDEO OVERLAY`, `Clip Examples Folder`, …), which matters for telling footage from assets. `brief` also returns `linkedDocs` (sub-docs to read with `--doc`) and the campaign page's reference materials; with no doc it returns `doc: null` plus a note rather than failing.
 
-## 6. Campaign config schema + `propose-config`
+## 6. Campaign config schema + `propose-config` ✅ done
 - zod `CampaignConfig` (per `DATA_MODEL.md`), with `review.autoApprove` as `z.literal(false)`.
 - `propose-config` validates, stores and moves to `pending_confirmation`. It **cannot** move to `active`.
 - **Done when:** an invalid config is rejected with field-level errors; `autoApprove: true` is rejected; grepping `src/cli` finds no path that sets `active`.
+- **Outcome:** schema lives in `src/modules/campaign-config` (zod, strict: unknown/misspelled keys are errors) and the DB type derives from it. Every field needs a confidence or an `unresolvedFields` entry; `extraction.unexpressedRules` carries brief rules the config can't express for the reviewer. `propose-config` requires `campaignType = lf`, works from discovered / requirements_drafted / pending_confirmation / needs_attention, voids any earlier confirmation, and audits the draft; `--dry-run` validates only. A static test keeps the `active` literal out of `src/cli`. Verified on MW4 (now `pending_confirmation`).
 
 ## 7. `footage-sources` + footage commands
 - URL → kind classifier for every row in `ARCHITECTURE.md` § "Footage source kinds".

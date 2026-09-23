@@ -20,10 +20,11 @@ import {
   type ListedCampaign,
 } from "../campaign-connector/index.js";
 import { parseGoogleDocUrl, readGoogleDoc, type ReaderDeps } from "../brief-reader/index.js";
+import { validateCampaignConfig } from "../campaign-config/index.js";
 
 export class CampaignsError extends Error {
   constructor(
-    public readonly code: "not_found" | "invalid_argument",
+    public readonly code: "not_found" | "invalid_argument" | "invalid_state",
     message: string,
   ) {
     super(message);
@@ -277,4 +278,59 @@ async function briefSource(ctx: Ctx, ref: string) {
       referenceMaterials: m.referenceMaterials,
     };
   }
+}
+
+/** States a draft config can be (re)proposed from. An active campaign has to be paused or flagged first. */
+const PROPOSABLE_FROM = ["discovered", "requirements_drafted", "pending_confirmation", "needs_attention"] as const;
+
+/**
+ * Validates Claude's draft config and parks it for a person to confirm
+ * (status → pending_confirmation). This can never activate a campaign: only a
+ * reviewer's confirmation in the web app can, and transition() enforces that.
+ */
+export async function proposeConfig(ctx: Ctx, ref: string, input: unknown, opts: { dryRun?: boolean } = {}) {
+  const config = validateCampaignConfig(input);
+  const c = await resolveCampaign(ctx.db, ref);
+  if (c.campaignType !== "lf") {
+    throw new CampaignsError(
+      "invalid_state",
+      `Only long-form (lf) campaigns can be onboarded; this one is ${c.campaignType ?? "unclassified"}. Run \`campaign classify\` first.`,
+    );
+  }
+  if (!(PROPOSABLE_FROM as readonly string[]).includes(c.status)) {
+    throw new CampaignsError(
+      "invalid_state",
+      `Can't propose a config while the campaign is ${c.status}; allowed from ${PROPOSABLE_FROM.join(", ")}.`,
+    );
+  }
+  const lowConfidence = Object.entries(config.extraction.fieldConfidence)
+    .filter(([, v]) => v === "low")
+    .map(([k]) => k);
+  const summary = {
+    lowConfidence,
+    unresolved: config.extraction.unresolvedFields,
+    unexpressedRules: config.extraction.unexpressedRules,
+  };
+  if (opts.dryRun) return { id: c.id, valid: true, dryRun: true, config, ...summary };
+
+  await ctx.db.transaction(async (tx) => {
+    await transition(tx, {
+      entity: "campaign",
+      id: c.id,
+      to: "pending_confirmation",
+      actor: ctx.actor,
+      reason: "config proposed; awaiting human confirmation",
+      expectFrom: PROPOSABLE_FROM,
+      // A new draft voids any earlier confirmation.
+      set: { config, configConfirmedAt: null, configConfirmedBy: null },
+    });
+    await audit(tx, {
+      entityType: "campaign",
+      entityId: c.id,
+      action: "propose_config",
+      actor: ctx.actor,
+      details: { config, previous: c.config },
+    });
+  });
+  return { id: c.id, status: "pending_confirmation" as const, ...summary };
 }

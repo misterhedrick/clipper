@@ -22,4 +22,12 @@ describe("status writes", () => {
       .map((file) => relative(SRC, file));
     expect(offenders).toEqual([]);
   });
+
+  it("never name the active status in CLI code (campaigns reach active only via a reviewer)", () => {
+    const cliDir = join(SRC, "cli");
+    const offenders = tsFiles(cliDir)
+      .filter((file) => /["'`]active["'`]/.test(readFileSync(file, "utf8")))
+      .map((file) => relative(SRC, file));
+    expect(offenders).toEqual([]);
+  });
 });

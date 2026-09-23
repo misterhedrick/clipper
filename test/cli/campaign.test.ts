@@ -5,6 +5,7 @@ import { run } from "../../src/cli/run.js";
 import { createDb, type Db } from "../../src/db/client.js";
 import { auditLog, campaigns, statusEvents } from "../../src/db/schema.js";
 import { resetTestDatabase, TEST_DATABASE_URL, truncateAll } from "../helpers/db.js";
+import { validConfig } from "../helpers/config.js";
 
 const MW4 = "24ad920b-d24f-479e-9cef-f22182e4a0c0";
 const campaignPage = readFileSync(new URL("../fixtures/content-rewards-campaign-page.html", import.meta.url), "utf8");
@@ -30,7 +31,12 @@ const fakeFetch = vi.fn(async (input: string | URL | Request) => {
 describe.skipIf(!TEST_DATABASE_URL)("clipper campaign …", () => {
   let db: Db;
   let pool: { end(): Promise<void> };
-  const cli = (...argv: string[]) => run(argv, { db, connector: { fetch: fakeFetch } });
+  let stdinText = "";
+  const cli = (...argv: string[]) => run(argv, { db, connector: { fetch: fakeFetch }, stdin: async () => stdinText });
+  const propose = (config: unknown, ...extra: string[]) => {
+    stdinText = JSON.stringify(config);
+    return cli("campaign", "propose-config", MW4, "--file", "-", ...extra);
+  };
 
   beforeAll(async () => {
     await resetTestDatabase(TEST_DATABASE_URL!);
@@ -151,6 +157,78 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper campaign …", () => {
     const none = (await cli("campaign", "brief", MW4)).output as { doc: unknown; note: string };
     expect(none.doc).toBeNull();
     expect(none.note).toMatch(/No Google Doc/);
+  });
+
+  describe("propose-config", () => {
+    beforeEach(async () => {
+      await cli("campaign", "add", `https://contentrewards.com/discover/${MW4}`);
+    });
+    const row = async () => (await db.select().from(campaigns))[0]!;
+
+    it("refuses campaigns that aren't classified long-form", async () => {
+      const res = await propose(validConfig());
+      expect(res.output).toMatchObject({ error: { code: "invalid_state" } });
+      await cli("campaign", "classify", MW4, "--type", "ugc", "--reason", "original content");
+      expect((await propose(validConfig())).output).toMatchObject({ error: { code: "invalid_state" } });
+    });
+
+    it("stores the draft, moves to pending_confirmation, and audits it", async () => {
+      await cli("campaign", "classify", MW4, "--type", "lf", "--reason", "footage clipping");
+      const res = await propose(validConfig());
+      expect(res.exitCode).toBe(0);
+      expect(res.output).toMatchObject({ status: "pending_confirmation", unresolved: ["clipGeneration.brandTemplateId"] });
+      expect(await row()).toMatchObject({
+        status: "pending_confirmation",
+        config: { requirements: { requiredTags: ["@callofduty"] } },
+        configConfirmedAt: null,
+      });
+      const audits = await db.select().from(auditLog).where(eq(auditLog.action, "propose_config"));
+      expect(audits).toHaveLength(1);
+    });
+
+    it("can re-propose a pending draft, and voids an earlier confirmation", async () => {
+      await cli("campaign", "classify", MW4, "--type", "lf", "--reason", "footage clipping");
+      await propose(validConfig());
+      await db.update(campaigns).set({ configConfirmedAt: new Date(), configConfirmedBy: "reviewer:alex" });
+      const changed = validConfig();
+      changed.requirements.maxAdditionalHashtags = 1;
+      expect((await propose(changed)).exitCode).toBe(0);
+      expect(await row()).toMatchObject({ configConfirmedAt: null, configConfirmedBy: null });
+    });
+
+    it("rejects an invalid config with field-level issues and changes nothing", async () => {
+      await cli("campaign", "classify", MW4, "--type", "lf", "--reason", "footage clipping");
+      const bad = validConfig();
+      bad.review.autoApprove = true;
+      const res = await propose(bad);
+      expect(res.exitCode).toBe(1);
+      expect(res.output).toMatchObject({
+        error: { code: "invalid_config", issues: [{ path: "review.autoApprove", message: expect.any(String) }] },
+      });
+      expect(await row()).toMatchObject({ status: "discovered", config: {} });
+    });
+
+    it("--dry-run validates without writing", async () => {
+      await cli("campaign", "classify", MW4, "--type", "lf", "--reason", "footage clipping");
+      expect((await propose(validConfig(), "--dry-run")).output).toMatchObject({ valid: true, dryRun: true });
+      expect((await row()).status).toBe("discovered");
+    });
+
+    it("never activates, and refuses to overwrite an active campaign's config", async () => {
+      await cli("campaign", "classify", MW4, "--type", "lf", "--reason", "footage clipping");
+      await propose(validConfig());
+      expect((await row()).status).toBe("pending_confirmation");
+      await db.update(campaigns).set({ status: "active" }); // as if a reviewer confirmed
+      expect((await propose(validConfig())).output).toMatchObject({ error: { code: "invalid_state" } });
+    });
+
+    it("reports unreadable or non-JSON input as a usage error", async () => {
+      stdinText = "{not json";
+      expect((await cli("campaign", "propose-config", MW4, "--file", "-")).output).toMatchObject({ error: { code: "usage" } });
+      expect((await cli("campaign", "propose-config", MW4, "--file", "/no/such/file.json")).output).toMatchObject({
+        error: { code: "usage" },
+      });
+    });
   });
 
   it("returns structured errors with non-zero exit codes", async () => {

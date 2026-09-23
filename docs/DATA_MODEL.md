@@ -22,32 +22,34 @@ PostgreSQL schema. Every table has `id uuid primary key default gen_random_uuid(
 
 ### `CampaignConfig` shape (stored in `campaigns.config`)
 
+Source of truth: the zod schema in `src/modules/campaign-config/index.ts`. The DB column's type derives from it. Objects are strict, so unknown or misspelled keys are rejected, not dropped.
+
 ```ts
 type CampaignConfig = {
   clipGeneration: {
-    brandTemplateId?: string;
-    aspectRatio: "portrait" | "landscape" | "square";
-    minDurationSeconds: number;
-    maxDurationSeconds: number;
+    brandTemplateId?: string;                 // OpusClip brand template (opusclip_list_brand_templates)
+    aspectRatio: "portrait" | "landscape" | "square" | "four_five";
+    minDurationSeconds: number;               // int ≥ 1, ≤ max
+    maxDurationSeconds: number;               // int ≤ 600 (OpusClip's bucket limit)
     originalAudioOnly: boolean;
     captionsEnabled: boolean;
   };
   requirements: {
     requiredOverlayAssetIds: string[];
     requiredOnScreenText: string[];
-    requiredCaptionLines: string[];
-    requiredTags: string[];
+    requiredCaptionLines: string[];           // exact phrases, checked verbatim
+    requiredTags: string[];                   // "@handle"
     disclosureLines: string[];
-    maxAdditionalHashtags: number;
+    maxAdditionalHashtags: number;            // int ≥ 0
   };
   review: {
-    requiredChecks: string[]; // e.g. ["visual_quality", "campaign_branding", "caption_compliance"]
-    autoApprove: false; // literal type — this must never be true in v1
+    requiredChecks: string[];
+    autoApprove: false;                       // literal: anything else is rejected
   };
   extraction: {
-    // one entry per field above that Claude filled in while reading the brief
-    fieldConfidence: Record<string, "high" | "low">;
-    unresolvedFields: string[];
+    fieldConfidence: Partial<Record<ConfigField, "high" | "low">>;  // ConfigField = "clipGeneration.aspectRatio" | …
+    unresolvedFields: ConfigField[];          // every field has a confidence or is listed here
+    unexpressedRules: string[];               // brief rules the config can't capture, shown to the reviewer
   };
 };
 ```

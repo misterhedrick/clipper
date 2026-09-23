@@ -5,6 +5,7 @@ import { OPERATOR_ACTOR, TransitionError } from "../db/transition.js";
 import { CampaignConnectorError, type ConnectorDeps } from "../modules/campaign-connector/index.js";
 import { CampaignsError } from "../modules/campaigns/index.js";
 import { BriefReaderError } from "../modules/brief-reader/index.js";
+import { InvalidConfigError } from "../modules/campaign-config/index.js";
 import { campaignCommands } from "./commands/campaign.js";
 import { guardCommands } from "./commands/guard.js";
 
@@ -100,6 +101,9 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<RunResult
   } catch (err) {
     if (err instanceof UsageError) return errorResult("usage", `${err.message}. Usage: clipper ${group} ${name} ${command.usage}`);
     if (err instanceof ConfigError) return errorResult("config", err.message);
+    if (err instanceof InvalidConfigError) {
+      return { exitCode: 1, output: { error: { code: err.code, message: err.message, issues: err.issues } } };
+    }
     if (
       err instanceof CampaignsError ||
       err instanceof TransitionError ||

@@ -3,11 +3,13 @@ import {
   classifyCampaign,
   flagCampaign,
   listCampaigns,
+  proposeConfig,
   readCampaignBrief,
   scoutCampaigns,
   showCampaign,
 } from "../../modules/campaigns/index.js";
-import { positional, requiredOption, type Command, type CommandContext } from "../run.js";
+import { readFile } from "node:fs/promises";
+import { positional, requiredOption, UsageError, type Command, type CommandContext } from "../run.js";
 
 const moduleCtx = (ctx: CommandContext) => ({ db: ctx.db(), actor: ctx.actor, connector: ctx.connector });
 
@@ -52,6 +54,15 @@ export const campaignCommands: Record<string, Command> = {
     run: (ctx) =>
       classifyCampaign(moduleCtx(ctx), positional(ctx, 0, "id"), requiredOption(ctx, "type"), requiredOption(ctx, "reason")),
   },
+  "propose-config": {
+    summary: "Validate a drafted config and park it for a person to confirm (→ pending_confirmation). --dry-run only validates.",
+    usage: "<id> --file <config.json | -> [--dry-run]",
+    options: { file: { type: "string" }, "dry-run": { type: "boolean" } },
+    run: async (ctx) =>
+      proposeConfig(moduleCtx(ctx), positional(ctx, 0, "id"), await readJsonInput(ctx, requiredOption(ctx, "file")), {
+        dryRun: ctx.options["dry-run"] === true,
+      }),
+  },
   flag: {
     summary: "Move a campaign to needs_attention so a person looks at it.",
     usage: '<id> --reason "..."',
@@ -59,3 +70,14 @@ export const campaignCommands: Record<string, Command> = {
     run: (ctx) => flagCampaign(moduleCtx(ctx), positional(ctx, 0, "id"), requiredOption(ctx, "reason")),
   },
 };
+
+async function readJsonInput(ctx: CommandContext, file: string): Promise<unknown> {
+  const raw = file === "-" ? await ctx.stdin() : await readFile(file, "utf8").catch(() => {
+    throw new UsageError(`Can't read --file ${file}`);
+  });
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    throw new UsageError(`--file ${file} is not valid JSON (${(err as Error).message})`);
+  }
+}

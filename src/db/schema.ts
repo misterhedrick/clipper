@@ -12,6 +12,9 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { CampaignConfig } from "../modules/campaign-config/index.js";
+
+export type { CampaignConfig };
 
 // Vocabularies. The DB enforces these with CHECK constraints so a typo in
 // application code fails loudly instead of creating an unreachable state.
@@ -96,33 +99,6 @@ export type PostPlatform = (typeof POST_PLATFORMS)[number];
 
 export const CHECK_OUTCOMES = ["pass", "fail", "manual_review_required"] as const;
 export type CheckOutcome = (typeof CHECK_OUTCOMES)[number];
-
-export type CampaignConfig = {
-  clipGeneration: {
-    brandTemplateId?: string;
-    aspectRatio: "portrait" | "landscape" | "square";
-    minDurationSeconds: number;
-    maxDurationSeconds: number;
-    originalAudioOnly: boolean;
-    captionsEnabled: boolean;
-  };
-  requirements: {
-    requiredOverlayAssetIds: string[];
-    requiredOnScreenText: string[];
-    requiredCaptionLines: string[];
-    requiredTags: string[];
-    disclosureLines: string[];
-    maxAdditionalHashtags: number;
-  };
-  review: {
-    requiredChecks: string[];
-    autoApprove: false; // must never be true in v1
-  };
-  extraction: {
-    fieldConfidence: Record<string, "high" | "low">;
-    unresolvedFields: string[];
-  };
-};
 
 export type ClipEdit = { ops: unknown[]; reason: string; at: string };
 
