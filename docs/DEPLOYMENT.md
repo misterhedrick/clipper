@@ -12,6 +12,13 @@ Revised 2026-09-23: the database moved from Render Postgres to Supabase to keep 
 | **Postgres** | Supabase | free | 500 MB, plenty for this. **Free projects pause after ~7 days without activity**; the hourly operator run keeps it awake once it's scheduled. |
 | **R2 bucket** | Cloudflare | free tier | Ready-to-Post bundles. Zero egress fees for the downloads that happen on every approved clip. |
 
+## What's live (2026-09-23)
+
+- **Render:** `clipper-review` (free, Virginia), https://clipper-review.onrender.com, deploying `main`.
+- **Supabase:** project `clipper` (ref `yarntsabsnlzwpzlfiyn`, us-east-1, free) in the Tablemate org. Pooler host `aws-0-us-east-1.pooler.supabase.com`.
+- **Database login:** the app connects as **`clipper_app`**, a dedicated role, not `postgres`. It's not a superuser, can't bypass row-level security, and can only create objects in this database and its `public` schema. Its tables get no grants for Supabase's Data API roles (`anon`, `authenticated`; checked), so they aren't reachable through the project's REST API. The pooler username is `clipper_app.yarntsabsnlzwpzlfiyn`. The password lives only in Render's environment. To rotate it: `alter role clipper_app password '…'` in Supabase, then update `DATABASE_URL` on Render.
+- **CA:** `DATABASE_CA_CERT` holds Supabase Root 2021 CA (valid to 2031-04-26; SHA-256 `80:70:25:AD:…:CA:FA`).
+
 ## Supabase connection: two settings
 
 1. **`DATABASE_URL` = the Session pooler string.** In Supabase: *Connect → Session pooler*. It looks like `postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres`. Don't use the "Direct connection": it's IPv6-only on the free plan, and Render can't make IPv6 connections. Session mode (port 5432) behaves like a normal connection, so `SELECT … FOR UPDATE` and the credit-budget advisory lock work as designed. Don't use the transaction pooler (port 6543).
@@ -33,6 +40,8 @@ Both go in the Render service's environment, and in the operator Routine's envir
 Reviewers sign in at the service's URL with their name and `REVIEWER_TOKEN` (at least 24 characters). The session cookie is `Secure`, so the app must be served over HTTPS; Render's `onrender.com` domain is. Rotating `REVIEWER_TOKEN` signs everyone out. The sign-in throttle is in memory, which is fine for one instance. If the service ever scales out, put the app behind an SSO proxy or a shared rate limit.
 
 ## The Claude operator
+
+> **Network finding (2026-09-23):** Claude Code cloud sessions reach the internet only through an HTTPS egress proxy. A Postgres connection to Supabase's pooler (port 5432) opens a tunnel but never completes: the standard handshake times out and Postgres 17's direct-TLS mode is reset. Any Postgres host would behave the same. So a cloud operator Routine **can't use `DATABASE_URL` directly**; it has to reach the database through something that speaks HTTPS. HTTPS to the Render service works (`/health` → 200). See ROADMAP §6 for the options.
 
 A Claude Code Routine on this repository that runs the `clipper-operator` skill hourly and on demand. Its environment needs:
 
