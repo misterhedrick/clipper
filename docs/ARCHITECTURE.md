@@ -119,7 +119,7 @@ clipper guard submit                                (hook) read a PreToolUse pay
 
 # Candidates
 clipper candidate upsert <sourceJobId> --file clips.json   store opusclip_list_clips output (deduped by clip id), run objective checks → awaiting_review
-clipper candidate list [--status s] [--campaign id]  (r) includes OpusClip title/description/hashtags/score + check results
+clipper candidate list [--status s] [--campaign id] [--job id]  (r) includes OpusClip title/description/hashtags/score + check results
 clipper candidate record-edit <id> --ops-file ops.json --reason "..."   log a connector edit; candidate → awaiting_review again
 clipper candidate record-export <id> --url <exportUrl>   store the HD export URL from opusclip_export_clip (approved candidates only)
 clipper candidate prescreen <id> --verdict <recommend|hold|reject> --notes "..."   advisory only; never approves
@@ -160,7 +160,8 @@ src/
     brief-reader/           guideline doc text + hyperlinks (HTML export), following Google Docs sub-links one level
     footage-sources/        URL → kind classification; Drive folder / YouTube feed listing
     credits/                credit ledger: reserve / release / reconcile, budget checks
-    compliance/             objective checks + caption requirement validation
+    compliance/             objective checks + caption requirement validation (pure functions)
+    candidates/             opusclip_list_clips parsing, candidate upsert, pre-screen, captions, edit log
     packaging/              Ready-to-Post bundle → R2
     notifier/               webhook delivery
 .claude/

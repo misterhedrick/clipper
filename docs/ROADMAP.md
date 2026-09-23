@@ -2,7 +2,7 @@
 
 **Start here.** This page says where the project is going, how the whole process will work when it's done, and exactly where it stands today. It's the summary; the detail lives in the docs it links to.
 
-*Last updated: 2026-09-23 · develop includes tasks 0–8*
+*Last updated: 2026-09-23 · tasks 0–10 built; live checks for 8–9 pending*
 
 ---
 
@@ -60,7 +60,8 @@ Claude runs this loop **hourly** as a Claude Code Routine and ends each run with
 | One OpusClip project per video | Unique `(campaign, video)` key + one open reservation per job + `clipper:<jobId>` titles for crash recovery | ✅ built + tested |
 | No posting or sharing through OpusClip | Those connector tools are denied in `.claude/settings.json` | ✅ in force |
 | Campaign rules can't be silently dropped | Strict config schema; `autoApprove` must be `false` | ✅ built + tested |
-| Captions include every required phrase, tag and disclosure | `set-caption` validation | ⏳ task 10 |
+| Captions include every required phrase, tag and disclosure | `set-caption` validation | ✅ built + tested |
+| Objective checks never claim a pass they can't verify | unknown aspect/duration, overlays, on-screen text → `manual_review_required` | ✅ built + tested |
 | Everything is auditable | `status_events` for status changes, `audit_log` for other writes | ✅ built |
 
 ## 5. Where we are
@@ -78,21 +79,23 @@ Claude runs this loop **hourly** as a Claude Code Routine and ends each run with
 | 6 | Campaign config schema + `propose-config` | ✅ |
 | 7 | Footage sourcing (Drive folders, YouTube channels, select/skip) | ✅ |
 | 8 | Credit ledger + submit protocol + guard hook | ✅ code · ⏳ live 10-credit test |
-| 9 | Collect clips from OpusClip + objective checks | ⏳ next |
-| 10 | Caption validation + pre-screen + reviewer-requested edits | ⏳ |
-| 11 | Review web page (confirm configs, approve clips, record posts) | ⏳ |
+| 9 | Collect clips from OpusClip + objective checks (`candidate upsert`) | ✅ code · ⏳ live check (real clip field names) |
+| 10 | Caption validation + pre-screen + reviewer-requested edits | ✅ |
+| 11 | Review web page (confirm configs, approve clips, record posts) | ⏳ next |
 | 12 | Ready-to-Post packaging to R2 + notifications | ⏳ |
 | 13 | Deploy: Render (web + Postgres) + hourly Claude Routine | ⏳ |
 | 14 | End to end on a real campaign, twice (idempotency) | ⏳ |
 
 **Milestone A (Claude can read campaigns) is done.** Claude can scout, add, classify, read briefs, propose configs and choose footage, all through the CLI, with nothing spent.
 
+**Milestone B (clips get made) is built; its live check is pending.** Reserve → submit → collect → check → pre-screen → caption → reviewer-requested edits all work against fixtures. What's left is one real 10-credit run, which needs an `active` campaign, and only a person can activate one (task 11).
+
 ### Milestones
 
 | Milestone | Tasks | What it unlocks | Spends money? |
 |---|---|---|---|
 | **A. Claude can read campaigns** | 3–7 | Scout → brief → config → footage | No · ✅ done |
-| **B. Clips get made** | 8–10 | Submit to OpusClip within budget, collect and pre-screen clips | OpusClip credits · in progress |
+| **B. Clips get made** | 8–10 | Submit to OpusClip within budget, collect and pre-screen clips | OpusClip credits · built, live check pending |
 | **C. Review and packages** | 11–12 | Your review page, clip bundles, notifications | Storage (small) |
 | **D. Runs itself** | 13–14 | Hosted, scheduled, proven on a real campaign | Hosting |
 
@@ -113,10 +116,9 @@ Claude runs this loop **hourly** as a Claude Code Routine and ends each run with
 
 ## 6. What's next
 
-1. **Task 9:** collect clips from OpusClip into the database and run objective checks (aspect ratio, duration).
-2. **Task 10:** caption validation (exact phrases, tags, `#Ad` on its own line), pre-screen verdicts, and logging of reviewer-requested edits.
-3. **Task 11:** the review web page. This unblocks confirming a campaign, and with it the first real OpusClip test.
-4. **First real test:** a 10-minute slice (~10 credits) of a Charlie Berens special: reserve → submit → collect → pre-screen → preview in chat.
+1. **Task 11:** the review web page. Confirming a campaign there is what makes it `active`, which unblocks the first real OpusClip test. Approving/rejecting clips and recording posts come in the same task.
+2. **First real test (closes out tasks 8 and 9):** a 10-minute slice (~10 credits) of a Charlie Berens special: reserve → submit → collect (`candidate upsert`) → pre-screen → caption. On that first upsert, check the real `opusclip_list_clips` field names and stage values against the parser (`src/modules/candidates/opusclip.ts`), and narrow it to what OpusClip actually sends.
+3. **Task 12:** Ready-to-Post packaging to R2, `record-export`, and notifications.
 
 ## 7. Decisions and inputs needed from you
 
@@ -134,6 +136,8 @@ Claude runs this loop **hourly** as a Claude Code Routine and ends each run with
 - **YouTube channels** show only the 15 most recent uploads (feed limit).
 - **Video length is unknown** before submitting, so credits are held at a 90-minute estimate unless a range or length is given. `credits reconcile` corrects the ledger from OpusClip's real usage.
 - **No automated posting.** It's out of scope for v1 by design.
+- **Clip field names not yet seen live.** No OpusClip project existed when `candidate upsert` was built, so its parser accepts several spellings of each field. The first real run confirms which one OpusClip uses.
+- **Disclosures always go on their own line.** The config has no per-campaign switch; every `disclosureLines` entry must be a line of its own.
 
 ## 9. Where to read more
 

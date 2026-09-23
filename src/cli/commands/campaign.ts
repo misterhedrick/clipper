@@ -8,8 +8,7 @@ import {
   scoutCampaigns,
   showCampaign,
 } from "../../modules/campaigns/index.js";
-import { readFile } from "node:fs/promises";
-import { positional, requiredOption, UsageError, type Command, type CommandContext } from "../run.js";
+import { positional, readJsonInput, requiredOption, type Command, type CommandContext } from "../run.js";
 
 const moduleCtx = (ctx: CommandContext) => ({ db: ctx.db(), actor: ctx.actor, connector: ctx.connector });
 
@@ -70,14 +69,3 @@ export const campaignCommands: Record<string, Command> = {
     run: (ctx) => flagCampaign(moduleCtx(ctx), positional(ctx, 0, "id"), requiredOption(ctx, "reason")),
   },
 };
-
-async function readJsonInput(ctx: CommandContext, file: string): Promise<unknown> {
-  const raw = file === "-" ? await ctx.stdin() : await readFile(file, "utf8").catch(() => {
-    throw new UsageError(`Can't read --file ${file}`);
-  });
-  try {
-    return JSON.parse(raw);
-  } catch (err) {
-    throw new UsageError(`--file ${file} is not valid JSON (${(err as Error).message})`);
-  }
-}

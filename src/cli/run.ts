@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import { ConfigError, loadConfig } from "../config.js";
 import { createDb, type Db } from "../db/client.js";
@@ -7,10 +8,12 @@ import { CampaignsError } from "../modules/campaigns/index.js";
 import { BriefReaderError } from "../modules/brief-reader/index.js";
 import { InvalidConfigError } from "../modules/campaign-config/index.js";
 import { campaignCommands } from "./commands/campaign.js";
+import { candidateCommands } from "./commands/candidate.js";
 import { guardCommands } from "./commands/guard.js";
 import { footageCommands } from "./commands/footage.js";
 import { creditsCommands, sourceCommands } from "./commands/source.js";
 import { SubmissionError } from "../modules/submissions/index.js";
+import { CandidatesError } from "../modules/candidates/index.js";
 import { FootageError } from "../modules/footage-sources/index.js";
 import { SourcingError } from "../modules/sourcing/index.js";
 
@@ -45,6 +48,7 @@ const groups: Record<string, Record<string, Command>> = {
   footage: footageCommands,
   source: sourceCommands,
   credits: creditsCommands,
+  candidate: candidateCommands,
   guard: guardCommands,
 };
 
@@ -120,6 +124,9 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<RunResult
     if (err instanceof InvalidConfigError) {
       return { exitCode: 1, output: { error: { code: err.code, message: err.message, issues: err.issues } } };
     }
+    if (err instanceof CandidatesError) {
+      return { exitCode: 1, output: { error: { code: err.code, message: err.message, ...err.details } } };
+    }
     if (
       err instanceof CampaignsError ||
       err instanceof TransitionError ||
@@ -154,4 +161,22 @@ export function requiredOption(ctx: CommandContext, name: string): string {
   const value = ctx.options[name];
   if (typeof value !== "string" || !value.trim()) throw new UsageError(`Missing --${name}`);
   return value;
+}
+
+/** Reads --file as text (`-` reads stdin). */
+export async function readTextInput(ctx: CommandContext, file: string): Promise<string> {
+  if (file === "-") return ctx.stdin();
+  return readFile(file, "utf8").catch(() => {
+    throw new UsageError(`Can't read --file ${file}`);
+  });
+}
+
+/** Reads --file as JSON (`-` reads stdin). */
+export async function readJsonInput(ctx: CommandContext, file: string): Promise<unknown> {
+  const raw = await readTextInput(ctx, file);
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    throw new UsageError(`--file ${file} is not valid JSON (${(err as Error).message})`);
+  }
 }
