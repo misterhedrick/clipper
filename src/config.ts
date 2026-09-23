@@ -16,6 +16,8 @@ const sections = {
     PORT: z.coerce.number().int().positive().default(3000),
     // Shared secret for the review web app (v1). Long enough not to be guessable.
     REVIEWER_TOKEN: z.string().min(24, "must be at least 24 characters"),
+    // Reverse-proxy hops in front of the app (1 on Render); 0 when run directly.
+    TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
   }),
   credits: z.object({
     // Max OpusClip credits `clipper source reserve` may hold per UTC day (~1 credit per source minute).
