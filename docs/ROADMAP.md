@@ -137,8 +137,9 @@ Claude runs this loop **hourly** as a Claude Code Routine and ends each run with
 |---|---|
 | Before the first real test | Join the Charlie Berens campaign on Content Rewards, then OK spending ~10 credits on a 10-minute slice |
 | Before the first real test | A Cloudflare R2 bucket for clip bundles, with a bucket-scoped API token (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`), and a Slack or Discord incoming-webhook URL (`NOTIFY_WEBHOOK_URL`). The code is ready for both. |
-| Before real use | Pick a daily credit budget (placeholder: 120/day ≈ 2 hours of footage; the month's 900 credits ≈ 15 hours) |
-| Now (task 13) | In the Claude cloud environment's settings, add `CLIPPER_OPERATOR_TOKEN` (copy `OPERATOR_TOKEN` from Render → clipper-review → Environment); the app URL is built in. Pick the daily credit budget (Render: `OPUSCLIP_DAILY_CREDIT_BUDGET`). Then OK scheduling the hourly Routine. |
+| Now (task 13) | In the Claude cloud environment's settings, add `CLIPPER_OPERATOR_TOKEN` (copy `OPERATOR_TOKEN` from Render → clipper-review → Environment); the app URL is built in. Then OK scheduling the hourly Routine. |
+
+**Decided:** daily OpusClip budget **120 credits** (≈2 h of footage/day; set on Render as `OPUSCLIP_DAILY_CREDIT_BUDGET`, 2026-09-23). The month's 900 credits could go in ~7 days at that rate; the reserve step also refuses anything over OpusClip's remaining monthly credits.
 
 ## 8. Known limits (v1)
 
