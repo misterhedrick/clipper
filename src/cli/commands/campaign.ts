@@ -3,6 +3,7 @@ import {
   classifyCampaign,
   flagCampaign,
   listCampaigns,
+  readCampaignBrief,
   scoutCampaigns,
   showCampaign,
 } from "../../modules/campaigns/index.js";
@@ -32,6 +33,17 @@ export const campaignCommands: Record<string, Command> = {
     usage: "[--status <status>]",
     options: { status: { type: "string" } },
     run: (ctx) => listCampaigns(ctx.db(), { status: ctx.options.status as string | undefined }),
+  },
+  brief: {
+    summary: "The brief as text (links shown inline as `text <url>`) + every link + reference materials. --doc reads a linked sub-doc.",
+    usage: "<id> [--doc <googleDocUrl>]",
+    options: { doc: { type: "string" } },
+    run: (ctx) =>
+      readCampaignBrief(
+        { ...moduleCtx(ctx), reader: { fetch: ctx.connector.fetch } },
+        positional(ctx, 0, "id"),
+        ctx.options.doc as string | undefined,
+      ),
   },
   classify: {
     summary: "Record the campaign type (lf | ugc | music | slideshow | unclear) and why.",

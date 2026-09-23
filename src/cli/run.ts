@@ -4,6 +4,7 @@ import { createDb, type Db } from "../db/client.js";
 import { OPERATOR_ACTOR, TransitionError } from "../db/transition.js";
 import { CampaignConnectorError, type ConnectorDeps } from "../modules/campaign-connector/index.js";
 import { CampaignsError } from "../modules/campaigns/index.js";
+import { BriefReaderError } from "../modules/brief-reader/index.js";
 import { campaignCommands } from "./commands/campaign.js";
 import { guardCommands } from "./commands/guard.js";
 
@@ -99,7 +100,12 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<RunResult
   } catch (err) {
     if (err instanceof UsageError) return errorResult("usage", `${err.message}. Usage: clipper ${group} ${name} ${command.usage}`);
     if (err instanceof ConfigError) return errorResult("config", err.message);
-    if (err instanceof CampaignsError || err instanceof TransitionError || err instanceof CampaignConnectorError) {
+    if (
+      err instanceof CampaignsError ||
+      err instanceof TransitionError ||
+      err instanceof CampaignConnectorError ||
+      err instanceof BriefReaderError
+    ) {
       return errorResult(err.code, err.message);
     }
     return errorResult("internal", (err as Error).stack ?? String(err));

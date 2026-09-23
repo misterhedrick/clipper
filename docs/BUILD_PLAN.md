@@ -31,10 +31,11 @@ Content Rewards URL → metadata + reference materials. Live canary test: `RUN_N
 - **Done when:** `clipper campaign add <MW4 url>` creates a row, a second `add` is a no-op returning the same ID, and `scout` lists ~50 campaigns with titles and platforms (network test).
 - **Outcome:** verified live (add → created, re-add via `/campaigns/` URL → same ID, scout → 50 listed). Added migration `0003`: `campaigns.cr_snapshot` (payouts/budget/reference materials for the operator) and `audit_log` for non-status writes. `npx clipper …` runs via `bin/clipper`. `guard submit` exists as a stub that blocks every submission until task 8.
 
-## 5. `brief-reader` + `campaign brief`
+## 5. `brief-reader` + `campaign brief` ✅ done
 - Fetch the doc as `export?format=html`. Return the plain text **and** every hyperlink, unwrapping `google.com/url?q=` redirects. `--doc <url>` reads a linked sub-doc.
 - A 401 or redirect to sign-in → `{error:{code:"not_public"}}`, never retried.
 - **Done when:** for survey campaigns #25 (PULP) and #39 (Ryan Zofay), the output includes the Drive folder links that plain-text export drops.
+- **Outcome:** verified live, including that PULP's text export lacks its `PULP Assets Folder` link while `brief` shows it inline. The text renders every link as `words <url>`, so Claude sees what each link is called (`VIDEO OVERLAY`, `Clip Examples Folder`, …), which matters for telling footage from assets. `brief` also returns `linkedDocs` (sub-docs to read with `--doc`) and the campaign page's reference materials; with no doc it returns `doc: null` plus a note rather than failing.
 
 ## 6. Campaign config schema + `propose-config`
 - zod `CampaignConfig` (per `DATA_MODEL.md`), with `review.autoApprove` as `z.literal(false)`.

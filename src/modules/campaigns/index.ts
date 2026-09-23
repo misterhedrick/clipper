@@ -19,6 +19,7 @@ import {
   type ConnectorDeps,
   type ListedCampaign,
 } from "../campaign-connector/index.js";
+import { parseGoogleDocUrl, readGoogleDoc, type ReaderDeps } from "../brief-reader/index.js";
 
 export class CampaignsError extends Error {
   constructor(
@@ -229,3 +230,28 @@ export async function scoutCampaigns(ctx: Ctx, opts: { all?: boolean } = {}) {
   return { listed: listed.length, tracked: tracked.length, campaigns: shown };
 }
 
+
+/**
+ * The campaign's brief as text + links, alongside the campaign page's reference
+ * materials. `docUrl` reads a sub-doc the brief links to instead of the main one.
+ */
+export async function readCampaignBrief(ctx: Ctx & { reader?: ReaderDeps }, ref: string, docUrl?: string) {
+  const c = await resolveCampaign(ctx.db, ref);
+  const snapshot = (c.crSnapshot ?? {}) as { referenceMaterials?: { type: string | null; url: string }[] };
+  const referenceMaterials = snapshot.referenceMaterials ?? [];
+  const campaign = { id: c.id, title: c.title, status: c.status, campaignType: c.campaignType };
+
+  const target = docUrl ?? c.guidelineDocUrl;
+  if (!target) {
+    return {
+      campaign,
+      doc: null,
+      note: "No Google Doc brief among this campaign's reference materials. Read what's listed below, or flag the campaign.",
+      referenceMaterials,
+      linkedDocs: [],
+    };
+  }
+  const doc = await readGoogleDoc(target, ctx.reader);
+  const linkedDocs = doc.links.filter((l) => parseGoogleDocUrl(l.url) && parseGoogleDocUrl(l.url) !== doc.docId);
+  return { campaign, doc, referenceMaterials, linkedDocs };
+}

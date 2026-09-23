@@ -4,8 +4,8 @@ Goal: turn a freeform brief into a validated campaign config for a person to con
 
 ## 1. Read everything the brief points to
 
-`clipper campaign brief <id>` returns the doc text, every hyperlink in it, and the campaign's `referenceMaterials`. Also read:
-- linked Google Docs (sub-briefs: caption rules, content guides) with `clipper campaign brief --doc <url>`;
+`clipper campaign brief <id>` returns the doc text (each link shown inline as `words <url>`), every hyperlink in it, `linkedDocs` to read next, and the campaign's `referenceMaterials`. Also read:
+- every entry in `linkedDocs` (sub-briefs: caption rules, content guides) with `clipper campaign brief <id> --doc <url>`;
 - nothing that needs sign-in. A Notion or other page that holds the real rules but can't be read is a `campaign flag` with the link.
 
 ## 2. Draft the config

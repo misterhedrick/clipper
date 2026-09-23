@@ -9,11 +9,19 @@ import { resetTestDatabase, TEST_DATABASE_URL, truncateAll } from "../helpers/db
 const MW4 = "24ad920b-d24f-479e-9cef-f22182e4a0c0";
 const campaignPage = readFileSync(new URL("../fixtures/content-rewards-campaign-page.html", import.meta.url), "utf8");
 const listingPage = readFileSync(new URL("../fixtures/content-rewards-discover-listing.html", import.meta.url), "utf8");
+const docExport = readFileSync(new URL("../fixtures/google-doc-export.html", import.meta.url), "utf8");
 
-// Serves the captured pages instead of hitting Content Rewards.
+// Serves captured pages instead of hitting Content Rewards / Google Docs.
 const fakeFetch = vi.fn(async (input: string | URL | Request) => {
   const url = String(input);
-  const body = url.endsWith("/discover") ? listingPage : url.includes(MW4) ? campaignPage : "";
+  if (url.includes("/document/d/PRIVATE/")) return new Response("", { status: 401 });
+  const body = url.endsWith("/discover")
+    ? listingPage
+    : url.includes("docs.google.com/document/")
+      ? docExport
+      : url.includes(MW4)
+        ? campaignPage
+        : "";
   const res = new Response(body, { status: body ? 200 : 404 });
   Object.defineProperty(res, "url", { value: url });
   return res;
@@ -107,6 +115,35 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper campaign …", () => {
     expect((await cli("campaign", "flag", MW4, "--reason", "also paused")).output).toMatchObject({ alreadyFlagged: true });
     const [row] = await db.select().from(campaigns);
     expect(row).toMatchObject({ status: "needs_attention", statusReason: "footage on MediaSilo" });
+  });
+
+  it("brief returns the doc text with inline links, its links, linked sub-docs and reference materials", async () => {
+    await cli("campaign", "add", `https://contentrewards.com/discover/${MW4}`);
+    const res = await cli("campaign", "brief", MW4);
+    expect(res.exitCode).toBe(0);
+    const out = res.output as {
+      doc: { docId: string; text: string; links: { url: string }[] };
+      linkedDocs: { text: string; url: string }[];
+      referenceMaterials: { url: string }[];
+    };
+    expect(out.doc.docId).toBe("1AaBbbXTwpIOueM0kFdMC1xB7Leh0Jq3T9C-i6Zowxk4");
+    expect(out.doc.text).toContain("Content Folder: <https://drive.google.com/drive/folders/FOLDER123?usp=sharing>");
+    expect(out.linkedDocs).toEqual([{ text: "Caption Guide", url: "https://docs.google.com/document/d/SUBDOC789/edit" }]);
+    expect(out.referenceMaterials[0]!.url).toContain("docs.google.com/document/d/1AaBbbX");
+
+    const sub = (await cli("campaign", "brief", MW4, "--doc", out.linkedDocs[0]!.url)).output as { doc: { docId: string } };
+    expect(sub.doc.docId).toBe("SUBDOC789");
+  });
+
+  it("brief reports a private doc as not_public and a campaign without a doc as doc: null", async () => {
+    await cli("campaign", "add", `https://contentrewards.com/discover/${MW4}`);
+    const priv = await cli("campaign", "brief", MW4, "--doc", "https://docs.google.com/document/d/PRIVATE/edit");
+    expect(priv).toEqual({ exitCode: 1, output: { error: { code: "not_public", message: expect.any(String) } } });
+
+    await db.update(campaigns).set({ guidelineDocUrl: null });
+    const none = (await cli("campaign", "brief", MW4)).output as { doc: unknown; note: string };
+    expect(none.doc).toBeNull();
+    expect(none.note).toMatch(/No Google Doc/);
   });
 
   it("returns structured errors with non-zero exit codes", async () => {
