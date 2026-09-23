@@ -22,6 +22,12 @@ services:
         value: "1"
       - key: REVIEWER_TOKEN
         generateValue: true     # read it in the dashboard; you sign in with it
+      - key: OPERATOR_TOKEN     # enables POST /operator/run for the Claude operator; separate from REVIEWER_TOKEN
+        generateValue: true
+      - key: OPUSCLIP_DAILY_CREDIT_BUDGET  # operator commands run here, so their config lives here too
+        sync: false
+      - key: NOTIFY_WEBHOOK_URL
+        sync: false
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_CA_CERT

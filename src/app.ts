@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastif
 import { sql } from "drizzle-orm";
 import type { Db } from "./db/client.js";
 import { registerReviewRoutes } from "./web/routes.js";
+import { registerOperatorRoute } from "./web/operator.js";
 import type { BundleStore } from "./modules/packaging/index.js";
 
 /** Without a reviewerToken the app serves only /health (no review pages). */
@@ -12,9 +13,11 @@ export type AppDeps = {
   bundles?: BundleStore;
   /** Proxy hops to trust for the client IP (1 on Render). 0 = use the socket address. */
   trustProxyHops?: number;
+  /** Enables POST /operator/run for the Claude operator. */
+  operatorToken?: string;
 };
 
-export function buildApp({ db, reviewerToken, now, bundles, trustProxyHops = 0 }: AppDeps): FastifyInstance {
+export function buildApp({ db, reviewerToken, now, bundles, trustProxyHops = 0, operatorToken }: AppDeps): FastifyInstance {
   // Behind Render's proxy every request comes from the proxy; trusting exactly one hop gives the
   // real client IP (for the sign-in throttle) without letting clients spoof it via X-Forwarded-For.
   const options: FastifyServerOptions = { logger: process.env.NODE_ENV !== "test" };
@@ -33,6 +36,7 @@ export function buildApp({ db, reviewerToken, now, bundles, trustProxyHops = 0 }
   });
 
   if (reviewerToken) registerReviewRoutes(app, { db, reviewerToken, now, bundles });
+  if (operatorToken) registerOperatorRoute(app, { db, operatorToken, bundles });
 
   return app;
 }

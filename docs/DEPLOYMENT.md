@@ -41,17 +41,25 @@ Reviewers sign in at the service's URL with their name and `REVIEWER_TOKEN` (at 
 
 ## The Claude operator
 
-> **Network finding (2026-09-23):** Claude Code cloud sessions reach the internet only through an HTTPS egress proxy. A Postgres connection to Supabase's pooler (port 5432) opens a tunnel but never completes: the standard handshake times out and Postgres 17's direct-TLS mode is reset. Any Postgres host would behave the same. So a cloud operator Routine **can't use `DATABASE_URL` directly**; it has to reach the database through something that speaks HTTPS. HTTPS to the Render service works (`/health` → 200). See ROADMAP §6 for the options.
+A Claude Code Routine on this repository that runs the `clipper-operator` skill hourly and on demand.
 
-A Claude Code Routine on this repository that runs the `clipper-operator` skill hourly and on demand. Its environment needs:
+**How it reaches the database.** Claude Code cloud sessions reach the internet only through an HTTPS egress proxy. Tested 2026-09-23: a Postgres connection to Supabase's pooler opens a tunnel but never completes (the standard handshake times out; Postgres 17's direct TLS is reset), and any Postgres host would behave the same. So the operator doesn't use `DATABASE_URL`. With `CLIPPER_REMOTE_URL` set, the `clipper` CLI (`src/cli/remote.ts`) sends each command to the review app's `POST /operator/run` (`src/web/operator.ts`), which runs it through the same `run()` against the database:
 
+- **Same rules.** The server always acts as `claude-operator`, so `transition()` and the review module refuse approvals, activations and posts exactly as they do locally, and there's still no approve command.
+- **Separate secret.** `OPERATOR_TOKEN` on the server = `CLIPPER_OPERATOR_TOKEN` in the Routine. It isn't `REVIEWER_TOKEN`: holding it lets you operate, never review. The endpoint only exists when `OPERATOR_TOKEN` is set.
+- **No server files.** File arguments (`--file`, `--ops-file`) are read by the client and sent as stdin. The server refuses a remote command that names a path.
+- **Sent once.** Only the wake-up health check is retried (the free service sleeps). A command that fails in transit is reported as "may or may not have run", never resent. `reserve` isn't idempotent, and the state machine plus crash-recovery protocol handle the rest.
+- **Fails closed.** The submit guard hook runs through the same path, and anything but an explicit allow blocks the submission.
+- **Proxy-aware.** The client uses undici's `EnvHttpProxyAgent`, so it honours `HTTPS_PROXY` / `NO_PROXY`.
+
+Because commands now run on Render, **their configuration lives on Render too**: `OPUSCLIP_DAILY_CREDIT_BUDGET`, `NOTIFY_WEBHOOK_URL`, `REVIEW_URL` and the R2 key pair (with write access, for `clipper package`) go in the web service's environment.
+
+The Routine's environment needs:
 - **The OpusClip connector** attached (Pro plan; the org is fixed at connect time, so connect the right one).
-- **Network access** to Content Rewards, Google Docs/Drive, YouTube, OpusClip's CDN, Supabase (`*.pooler.supabase.com:5432`), R2 (`*.r2.cloudflarestorage.com`) and your webhook host.
-- **Secrets:** `DATABASE_URL`, `DATABASE_CA_CERT`, `OPUSCLIP_DAILY_CREDIT_BUDGET`, `NOTIFY_WEBHOOK_URL`, `REVIEW_URL`, and the R2 key pair with write access (for `clipper package`, which refuses anything a person didn't approve).
-- **Dependencies installed:** `npm ci` at session start, so `npx clipper` works.
+- **`CLIPPER_REMOTE_URL=https://clipper-review.onrender.com` and `CLIPPER_OPERATOR_TOKEN`.** No database or R2 credentials.
+- **Network access** to the Render app, OpusClip, and (for the connector's own work) whatever it needs.
+- **Dependencies installed.** The SessionStart hook runs `npm ci` in a fresh checkout, so `npx clipper` works.
 - **This repo's `.claude/settings.json` in force.** It holds the submit guard hook and the denied posting/sharing tools. Check this in the Routine's environment before relying on it.
-
-It never needs `REVIEWER_TOKEN`: approval happens only in the web app.
 
 ## Migrations
 
