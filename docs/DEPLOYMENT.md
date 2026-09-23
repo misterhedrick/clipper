@@ -63,6 +63,10 @@ The operator isn't a Render service. It's a Claude Code Routine (scheduled trigg
 
 It never needs `REVIEWER_TOKEN`: approval happens only in the web app.
 
+## Review web app sign-in
+
+Reviewers sign in at the web service's URL with their name and `REVIEWER_TOKEN` (at least 24 characters; generate one with `openssl rand -base64 32`). The session cookie is `Secure`, so the app must be served over HTTPS; Render's default `onrender.com` domain already is. Rotating `REVIEWER_TOKEN` signs everyone out. The sign-in throttle is in memory, which is fine for one instance. If the service ever scales out, put the app behind an SSO proxy or a shared rate limit.
+
 ## Cold starts and the webhook
 
 Render's **free** web service tier spins down after inactivity and takes a noticeable moment to wake on the next request. That's a real problem for a webhook receiver — OpusClip calling back to a cold service risks a dropped or delayed delivery. Two ways this is already covered rather than needing new design:

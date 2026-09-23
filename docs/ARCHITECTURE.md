@@ -162,6 +162,8 @@ src/
     credits/                credit ledger: reserve / release / reconcile, budget checks
     compliance/             objective checks + caption requirement validation (pure functions)
     candidates/             opusclip_list_clips parsing, candidate upsert, pre-screen, captions, edit log
+    review/                 human-only decisions: confirm/pause campaigns, approve/needs-edit/reject/hold, record posts
+  web/                      review web app: reviewer sign-in (auth.ts), escaped HTML (html.ts), pages + forms (routes.ts)
     packaging/              Ready-to-Post bundle → R2
     notifier/               webhook delivery
 .claude/
@@ -175,7 +177,7 @@ Modules talk to each other through their exported functions, not each other's ta
 | Concern | Choice | Status |
 |---|---|---|
 | Runtime | TypeScript on Node 22 | built |
-| HTTP | Fastify | built (`/health`) |
+| HTTP | Fastify | built (`/health` + review web app, server-rendered, no client JS) |
 | Database | Postgres (Render managed), Drizzle migrations | built |
 | Validation | zod | built |
 | CLI | plain `node` entry with a small arg parser (no framework needed) | to build |

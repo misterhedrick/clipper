@@ -31,7 +31,7 @@ npm install
 cp .env.example .env          # fill in secrets; DATABASE_URL / TEST_DATABASE_URL point at local Postgres
 npm run migrate:dev           # apply migrations to DATABASE_URL
 npm test                      # DB tests run against TEST_DATABASE_URL (wiped on each run) and are skipped if it's unset
-npm run dev:api               # Fastify on PORT, GET /health
+npm run dev:api               # Fastify on PORT: GET /health, and the review web app at / (sign in with your name + REVIEWER_TOKEN)
 npx clipper help              # the operator CLI (JSON in, JSON out)
 ```
 
