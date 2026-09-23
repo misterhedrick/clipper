@@ -96,7 +96,11 @@ This only works if the doc is actually public ("anyone with the link can view").
 
 ### Footage folder (Google Drive)
 
-**Keyless listing (preferred, verified 2026-09-22):** `GET https://drive.google.com/embeddedfolderview?id={folderId}` returns HTML listing the folder's files and subfolders (`flip-entry` elements with titles and IDs) for any link-shared folder, with no API key. Recurse into subfolders. The Drive API option below is a fallback.
+**Keyless listing (preferred, verified 2026-09-22):** `GET https://drive.google.com/embeddedfolderview?id={folderId}` returns HTML listing the folder's files and subfolders for any link-shared folder, with no API key. Each item is a `<div class="flip-entry" id="entry-{id}">`: an `<a href>` to `/drive/folders/{id}` (folder) or `/file/d/{id}/view` (file), a list icon that for files is `…googleusercontent.com/16/type/{mimeType}` (e.g. `video/mp4`) and for folders carries `aria-label="Folder"`, a `flip-entry-title`, and a `flip-entry-last-modified` date. A missing or private folder returns 404. `footage-sources` recurses (depth 3, 40 folders by default). The Drive API option below is a fallback.
+
+**YouTube channels:** resolve an `@handle` / `/c/` / `/user/` page to its channel ID via `<link rel="canonical" href="https://www.youtube.com/channel/UC…">`, since other `"channelId"` values on the page belong to featured channels. Then `GET https://www.youtube.com/feeds/videos.xml?channel_id=UC…` (no key) returns the 15 most recent uploads. A Short's `<link rel="alternate">` points at `/shorts/{id}`, which is how `isShort` is set.
+
+**Dropbox shared folders** (`/scl/fo/…`) render client-side: the HTML has no file names, so they can't be listed without a browser. File links (`/scl/fi/…`) work directly.
 
 Two viable approaches, in preference order:
 

@@ -43,12 +43,15 @@ Content Rewards URL → metadata + reference materials. Live canary test: `RUN_N
 - **Done when:** an invalid config is rejected with field-level errors; `autoApprove: true` is rejected; grepping `src/cli` finds no path that sets `active`.
 - **Outcome:** schema lives in `src/modules/campaign-config` (zod, strict: unknown/misspelled keys are errors) and the DB type derives from it. Every field needs a confidence or an `unresolvedFields` entry; `extraction.unexpressedRules` carries brief rules the config can't express for the reviewer. `propose-config` requires `campaignType = lf`, works from discovered / requirements_drafted / pending_confirmation / needs_attention, voids any earlier confirmation, and audits the draft; `--dry-run` validates only. A static test keeps the `active` literal out of `src/cli`. Verified on MW4 (now `pending_confirmation`).
 
-## 7. `footage-sources` + footage commands
+## 7. `footage-sources` + footage commands ✅ done
 - URL → kind classifier for every row in `ARCHITECTURE.md` § "Footage source kinds".
 - Drive folder listing via `embeddedfolderview` (recursive, depth-limited, with folder path per file). YouTube channel → channel ID → RSS feed.
 - `footage add | list-url | select | skip`. `select` creates a `source_jobs` row (`detected`); `skip` records a decision so later runs don't re-evaluate.
 - **Done when:** `list-url` on survey folders #46 (Nilo, 7 subfolders) and #23 (Charlie Berens, 2 MP4s) returns the right structure. Running `select` twice on the same file creates one job.
 - **Open item:** Dropbox shared-folder listing. Try the `?dl=0` HTML listing first. If that isn't feasible, Dropbox folders are human-picked file links for v1.
+- **Outcome:** verified live. Nilo lists 13 folders and 137 files with videos told apart from docs and images; Berens lists its 2 specials; a YouTube @handle resolves via the page's canonical link to its 15 most recent uploads, with Shorts flagged. `select` takes the video `--url` (the source key is derived, not typed), is idempotent, and decisions are final (`already_decided`). `list-url --campaign` marks decided videos and counts `undecidedVideos`. **Dropbox:** the shared-folder page renders client-side (no file names in the HTML), so folders stay human-picked file links for v1; `list-url` says so.
+
+**Milestone A (tasks 3–7) is complete:** Claude can scout, add, classify, read briefs, propose configs, and choose footage, all through the CLI, with nothing spent.
 
 ## 8. Credit ledger + submit protocol + guard hook
 - `source validate` (host supported, publicly reachable, campaign active → `queued`), `source reserve`, `source record-project`, `source record-failure`, `credits`, `credits reconcile` per `ARCHITECTURE.md`.

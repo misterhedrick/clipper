@@ -8,6 +8,9 @@ import { BriefReaderError } from "../modules/brief-reader/index.js";
 import { InvalidConfigError } from "../modules/campaign-config/index.js";
 import { campaignCommands } from "./commands/campaign.js";
 import { guardCommands } from "./commands/guard.js";
+import { footageCommands } from "./commands/footage.js";
+import { FootageError } from "../modules/footage-sources/index.js";
+import { SourcingError } from "../modules/sourcing/index.js";
 
 // Every command prints one JSON document to stdout. Failures print
 // {"error":{"code","message"}} and exit non-zero, so the operator playbook can
@@ -36,6 +39,7 @@ export type Command = {
 
 const groups: Record<string, Record<string, Command>> = {
   campaign: campaignCommands,
+  footage: footageCommands,
   guard: guardCommands,
 };
 
@@ -108,7 +112,9 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<RunResult
       err instanceof CampaignsError ||
       err instanceof TransitionError ||
       err instanceof CampaignConnectorError ||
-      err instanceof BriefReaderError
+      err instanceof BriefReaderError ||
+      err instanceof FootageError ||
+      err instanceof SourcingError
     ) {
       return errorResult(err.code, err.message);
     }

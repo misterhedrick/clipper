@@ -98,10 +98,13 @@ clipper campaign propose-config <id> --file config.json   validate (zod) + store
 clipper campaign flag <id> --reason "..."           status → needs_attention + notify
 
 # Footage
-clipper footage list-url <url>                  (r) expand a Drive folder (recursive), YouTube channel feed, or single file into entries {sourceKey, kind, name, url, path, sizeBytes?, publishedAt?}
-clipper footage add <campaignId> --url <url> [--label "..."] --reason "..."   register a footage source (folder, channel or file)
-clipper footage select <campaignId> --source-key <k> --reason "..."          mark one video for processing → source_job (detected)
-clipper footage skip <campaignId> --source-key <k> --reason "..."            record a deliberate skip so it isn't re-evaluated
+clipper footage list-url <url> [--campaign <id>] (r) expand a Drive folder (recursive, with folder paths), YouTube channel (15 most recent uploads, Shorts flagged) or file link into
+                                                    entries {sourceKey, kind, name, url, path, isVideo, mimeType?, isShort?, publishedAt?, description?, views?};
+                                                    with --campaign, each entry carries its recorded decision and `undecidedVideos` counts new ones
+clipper footage add <campaignId> --url <url> --reason "..." [--label "..."]   register a footage source (folder, channel or file); idempotent per URL
+clipper footage select <campaignId> --url <videoUrl> --reason "..." [--name n] [--path p] [--from <sourceUrl>]   → source_job (detected); idempotent
+clipper footage skip <campaignId> --url <videoUrl> --reason "..." [...]        record a deliberate skip (status skipped) so it isn't re-evaluated
+clipper footage list <campaignId> [--decision selected|skipped]               (r) registered sources and every decision with its reason
 
 # Processing (OpusClip calls themselves go through the connector; see "record first, then spend")
 clipper source validate <sourceJobId>               checks: supported host, public reachability, campaign active → queued
@@ -139,7 +142,7 @@ clipper notify --message "..."                      send a message to the human 
 | `youtube_channel` | `youtube.com/@handle` | resolve channel ID from page → `feeds/videos.xml?channel_id=` (15 most recent) | per video: `youtube:{videoId}` | `youtube.com/watch?v={videoId}` |
 | `youtube_video` | `youtube.com/watch?v=`, `youtu.be/`, `/shorts/` | — | `youtube:{videoId}` | canonical watch URL |
 | `s3_mp4` | Content Rewards `publicassetsbucket` video refs | from `referenceMaterials` (`type: video`) | `s3:{sha1(url)}` | as given |
-| `dropbox` | `dropbox.com/scl/fo/...`, `/scl/fi/...` | file links direct. Folder listing TBD (see Build Plan) | `dropbox:{sha1(url)}` | as given |
+| `dropbox` | `dropbox.com/scl/fo/...`, `/scl/fi/...` | file links direct. Folders **can't be listed** (the page renders client-side): a person supplies file links | `dropbox:{sha1(url without dl=)}` | as given, minus `dl=` |
 | `frameio`, `loom`, `vimeo`, `twitch` | share links | — | `{kind}:{sha1(url)}` | as given |
 | `unsupported` | Kick, MediaSilo, Notion, custom sites | — | — | → campaign `needs_attention` with the link, for a human |
 | `opus_upload` | a file a person supplies for an unsupported host | — | `upload:{sha1(file)}` | `opusclip_create_upload_link` → upload → `upload_id` (a person does the upload in v1) |
