@@ -15,7 +15,8 @@
     "db:generate": "drizzle-kit generate",
     "migrate": "node dist/db/migrate.js",
     "migrate:dev": "tsx src/db/migrate.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "clipper": "node --import tsx src/cli/index.ts"
   },
   "repository": {
     "type": "git",
@@ -35,5 +36,8 @@
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.1"
+  },
+  "bin": {
+    "clipper": "bin/clipper"
   }
 }

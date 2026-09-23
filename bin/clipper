@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# `npx clipper …` entry point. Runs the TypeScript CLI directly via tsx, so the
+# operator never runs a stale build.
+DIR="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+exec node --import tsx "$DIR/src/cli/index.ts" "$@"

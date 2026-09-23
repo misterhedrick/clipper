@@ -4,8 +4,8 @@ Goal: turn a freeform brief into a validated campaign config for a person to con
 
 ## 1. Read everything the brief points to
 
-`clipper campaign brief <id>` returns the doc text, every hyperlink in it, and the campaign's `referenceMaterials`. Also read:
-- linked Google Docs (sub-briefs: caption rules, content guides) with `clipper campaign brief --doc <url>`;
+`clipper campaign brief <id>` returns the doc text (each link shown inline as `words <url>`), every hyperlink in it, `linkedDocs` to read next, and the campaign's `referenceMaterials`. Also read:
+- every entry in `linkedDocs` (sub-briefs: caption rules, content guides) with `clipper campaign brief <id> --doc <url>`;
 - nothing that needs sign-in. A Notion or other page that holds the real rules but can't be read is a `campaign flag` with the link.
 
 ## 2. Draft the config
@@ -27,10 +27,12 @@ Write `config.json` matching the `CampaignConfig` schema (`docs/DATA_MODEL.md`).
 | `extraction.fieldConfidence` | — | `high` only if the brief states it explicitly. Inferred or defaulted values are `low`. |
 | `extraction.unresolvedFields` | — | Anything the brief doesn't cover |
 
-Also record, in the `propose-config` reason, the rules the config can't express. The person reviewing needs them: dedicated-page requirements, audience tier, "stay live 30 days", "don't make the brand look bad", content filters like "only videos with 1win merch".
+Put every rule the config can't express in `extraction.unexpressedRules`, one per entry. The person reviewing needs them: dedicated-page requirements, audience tier, "stay live 30 days", "don't make the brand look bad", content filters like "only videos with 1win merch".
+
+Every field needs an entry in `extraction.fieldConfidence` or in `extraction.unresolvedFields`. `brandTemplateId` comes from `opusclip_list_brand_templates`; omit it and list it as unresolved if none fits.
 
 ## 3. Propose it
 
-`clipper campaign propose-config <id> --file config.json`. The campaign moves to `pending_confirmation` and the person is notified. You're done; activation happens in the web app.
+First `clipper campaign propose-config <id> --file config.json --dry-run`. It returns every problem at once, each with its field path (`invalid_config` → `issues[]`); fix and repeat. Then run it without `--dry-run`. The campaign moves to `pending_confirmation` for a person to confirm. You're done; activation happens in the web app, and nothing you can run will activate it. The campaign must be classified `lf` first.
 
 If the brief is too thin to draft anything useful, `clipper campaign flag <id> --reason "..."` with the specific questions instead.

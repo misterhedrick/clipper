@@ -2,9 +2,9 @@ import { ConfigError, loadConfig, type Config } from "./config.js";
 import { createDb } from "./db/client.js";
 import { buildApp } from "./app.js";
 
-let config: Config;
+let config: Config<"db" | "server">;
 try {
-  config = loadConfig();
+  config = loadConfig(["db", "server"]);
 } catch (err) {
   if (err instanceof ConfigError) {
     console.error(err.message);

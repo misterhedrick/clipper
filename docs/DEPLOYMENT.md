@@ -4,12 +4,11 @@ This maps the architecture in `ARCHITECTURE.md` onto concrete hosting. Nothing h
 
 ## Services
 
-Three Render resources for compute + database (plus the Claude operator, which runs as a Claude Code Routine, not on Render; see below), plus a Cloudflare R2 bucket for file storage:
+Two Render resources (web service + Postgres), a Cloudflare R2 bucket, and the Claude operator, which runs as a Claude Code Routine, not on Render (see below). There's no worker or cron: OpusClip is reached through the OpusClip connector, which only exists inside a Claude session, so the hourly operator run does the polling., plus a Cloudflare R2 bucket for file storage:
 
 | Resource | Where | Runs | Why |
 |---|---|---|---|
 | **Web Service** | Render | Fastify app: `review-api` HTTP routes + the OpusClip webhook receiver (`server.ts`) | Needs a public HTTPS URL — this is what `conclusionActions` in `API_CONTRACTS.md` points at, and what a human reviewer's browser hits. |
-| **Cron Job** | Render | `clipper sync` every 10 minutes: poll OpusClip, upsert candidates, run checks, package approvals, send notifications | Deterministic and short-lived, so there's no need for a long-running worker. (Replaces the earlier pg-boss Background Worker; see `ARCHITECTURE.md`.) |
 | **PostgreSQL** | Render | The `tracker` database from `DATA_MODEL.md`; status columns double as the work queue | A plain managed instance, not behind a transaction-mode pooler, so `SELECT … FOR UPDATE` credit reservations behave normally. Database and compute share one platform and bill. |
 | **R2 bucket** | Cloudflare | `Ready to Post` / `Archive` / `Needs Attention` export bundles (`final.mp4`, `thumbnail.jpg`, `caption.txt`, `clip-metadata.json`) | S3-API-compatible, zero egress fees for the reviewer/poster downloads that happen on every approved clip. |
 
@@ -43,50 +42,26 @@ services:
         sync: false
       - key: R2_BUCKET_NAME
         sync: false
-      - key: OPUSCLIP_API_KEY
-        sync: false          # set manually in the Render dashboard, never committed
-      - key: GOOGLE_API_KEY
-        sync: false
-      - key: ANTHROPIC_API_KEY
-        sync: false
-      - key: NOTIFY_WEBHOOK_URL
-        sync: false
-
-  - type: cron
-    name: clipper-sync
-    runtime: node
-    plan: starter
-    schedule: "*/10 * * * *"
-    buildCommand: npm ci && npm run build
-    startCommand: npm run sync
-    envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: clipper-db
-          property: connectionString
-      - key: OPUSCLIP_API_KEY
-        sync: false
-      - key: OPUSCLIP_DAILY_CREDIT_BUDGET
-        sync: false
-      - key: R2_ACCOUNT_ID
-        sync: false
-      - key: R2_ACCESS_KEY_ID
-        sync: false
-      - key: R2_SECRET_ACCESS_KEY
-        sync: false
-      - key: R2_BUCKET_NAME
+      - key: REVIEWER_TOKEN
         sync: false
       - key: NOTIFY_WEBHOOK_URL
         sync: false
 ```
 
-Both `clipper-api` and `clipper-sync` build from the same repo/codebase — they're two entrypoints (`start:api` vs `sync` in `package.json`) into the same `src/`, not two separate apps. Keep it that way; splitting the repo later would fight the module boundaries in `ARCHITECTURE.md` for no benefit yet.
+The operator runs the same codebase's `clipper` CLI from its own checkout of this repo, so there's one implementation of every rule. Keep it that way; splitting the repo later would fight the module boundaries in `ARCHITECTURE.md` for no benefit yet.
 
 `clipper-db`'s connection string from Render's `fromDatabase` wiring is a direct connection, not a pooled one — no connection-mode caveats to document here, unlike a pooled provider.
 
 ## The Claude operator
 
-The operator isn't a Render service. It's a Claude Code Routine (scheduled trigger) on this repository that runs the `clipper-operator` skill a few times a day and on demand. Its environment needs network access to Content Rewards, Google Docs/Drive, YouTube and OpusClip, plus these secrets: `DATABASE_URL` (Render's *external* connection string, restricted by IP allowlist where possible), `OPUSCLIP_API_KEY`, `OPUSCLIP_DAILY_CREDIT_BUDGET` and `NOTIFY_WEBHOOK_URL`. It never needs R2 or reviewer credentials, because it can't approve or package anything.
+The operator isn't a Render service. It's a Claude Code Routine (scheduled trigger) on this repository that runs the `clipper-operator` skill hourly and on demand. It needs:
+
+- **The OpusClip connector** attached (Pro plan; the org is fixed at connect time, so connect the right one).
+- **Network access** to Content Rewards, Google Docs/Drive, YouTube and your Postgres.
+- **Secrets:** `DATABASE_URL` (Render's *external* connection string, restricted by IP allowlist where possible), `OPUSCLIP_DAILY_CREDIT_BUDGET`, `NOTIFY_WEBHOOK_URL`, and the bucket-scoped R2 key pair (for `clipper package`, which refuses anything a person didn't approve).
+- **This repo's `.claude/settings.json` in force.** It holds the submit guard hook and the denied posting/sharing tools. Check this in the Routine's environment before relying on it (BUILD_PLAN task 13).
+
+It never needs `REVIEWER_TOKEN`: approval happens only in the web app.
 
 ## Cold starts and the webhook
 
@@ -97,11 +72,11 @@ Render's **free** web service tier spins down after inactivity and takes a notic
 
 ## Migrations
 
-Render's **Pre-Deploy Command** (`npm run migrate` above) runs against the new release before it receives traffic. This keeps `clipper-api` and the next `clipper-sync` run from ever running against a schema they don't expect during a deploy.
+Render's **Pre-Deploy Command** (`npm run migrate` above) runs against the new release before it receives traffic. The operator's CLI reads the same database, so deploy schema changes before merging operator code that needs them.
 
 ## Secrets
 
-Every secret in `config.ts`'s required list — `OPUSCLIP_API_KEY`, `GOOGLE_API_KEY`, `ANTHROPIC_API_KEY`, `NOTIFY_WEBHOOK_URL`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, plus `DATABASE_URL` which Render injects automatically from the database resource — is set directly in the Render dashboard per service, `sync: false` in the blueprint so `render.yaml` itself never carries values. Never commit a `.env` with real values — `.env` should be in `.gitignore` from the first commit. The R2 access key pair is scoped to the one bucket, not account-wide, when created in the Cloudflare dashboard.
+Every secret the services use — `REVIEWER_TOKEN`, `NOTIFY_WEBHOOK_URL`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, plus `DATABASE_URL` which Render injects automatically from the database resource — is set directly in the Render dashboard per service, `sync: false` in the blueprint so `render.yaml` itself never carries values. Never commit a `.env` with real values — `.env` should be in `.gitignore` from the first commit. The R2 access key pair is scoped to the one bucket, not account-wide, when created in the Cloudflare dashboard.
 
 ## Health check
 

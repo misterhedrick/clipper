@@ -1,11 +1,11 @@
 # Clipper
 
-A clip-automation pipeline: Content Rewards campaigns → footage → OpusClip → human review → Ready to Post. Read `README.md` (spec) and `docs/ARCHITECTURE.md` (design) before changing anything.
+A clip-automation pipeline: Content Rewards campaigns → footage → OpusClip → human review → Ready to Post. Read `docs/ROADMAP.md` (direction + current status), `README.md` (spec) and `docs/ARCHITECTURE.md` (design) before changing anything. Keep `docs/ROADMAP.md` §5–7 current when a task finishes.
 
 ## Two modes of working in this repo
 
 - **Developing the platform:** follow `docs/BUILD_PLAN.md` in order. Each task has a "done when" check; verify it before moving on.
-- **Operating the pipeline** ("do an operator run", "scout campaigns", "onboard this campaign"): use the `clipper-operator` skill in `.claude/skills/`. In this mode you only act through the `clipper` CLI.
+- **Operating the pipeline** ("do an operator run", "scout campaigns", "onboard this campaign"): use the `clipper-operator` skill in `.claude/skills/`. In this mode you act only through the `clipper` CLI and the OpusClip connector, and only submit to OpusClip with parameters from `clipper source reserve`. A hook in `.claude/settings.json` blocks anything else; don't weaken or bypass it.
 
 ## The split to preserve
 

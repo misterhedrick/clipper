@@ -8,11 +8,13 @@ The goal is simple:
 
 It's run by a **Claude operator**, a scheduled Claude Code session that follows a playbook (`.claude/skills/clipper-operator/`). Claude does the reading and judgment; a small `clipper` CLI and database do everything that must be exact, idempotent or safe. You keep every decision that commits to a campaign, spends credits beyond the budget, or publishes.
 
+> **Status & direction:** see [`docs/ROADMAP.md`](docs/ROADMAP.md) for how the whole process will work, what's built (tasks 0–8, Milestone A done), what's next, and what's needed from you.
+
 **This file is the product spec (what and why).** Before writing code, also read, in order:
 
 1. [`docs/CAMPAIGN_SURVEY.md`](docs/CAMPAIGN_SURVEY.md): what real Content Rewards campaigns look like, and the evidence behind the design
 2. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): the code / Claude / human split, guardrails, CLI contract, footage source kinds
-3. [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md): database schema, including planned v2 changes
+3. [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md): database schema (v1–v3 migrations) and `transition()` rules
 4. [`docs/API_CONTRACTS.md`](docs/API_CONTRACTS.md): Content Rewards (verified live), Google Docs/Drive, OpusClip
 5. [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md): ordered, checkable implementation tasks for Phase 1
 6. [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md): Render hosting
@@ -30,6 +32,7 @@ cp .env.example .env          # fill in secrets; DATABASE_URL / TEST_DATABASE_UR
 npm run migrate:dev           # apply migrations to DATABASE_URL
 npm test                      # DB tests run against TEST_DATABASE_URL (wiped on each run) and are skipped if it's unset
 npm run dev:api               # Fastify on PORT, GET /health
+npx clipper help              # the operator CLI (JSON in, JSON out)
 ```
 
 Schema changes: edit `src/db/schema.ts`, then `npm run db:generate` to produce a new migration.
@@ -58,8 +61,8 @@ flowchart TD
   C --> D{"You confirm the config once"}
   D --> E["Claude registers footage sources and picks videos"]
   E --> F["Code validates source, checks credit budget"]
-  F --> G["Code creates OpusClip project from the public URL"]
-  G --> H["Code polls for candidate clips and runs objective checks"]
+  F --> G["Claude submits to OpusClip via the connector, with code-issued params"]
+  G --> H["Claude collects clips; code runs objective checks"]
   H --> I["Claude pre-screens candidates and drafts compliant captions"]
   I --> J{"You review"}
   J -->|Approve| K["Code packages export to Ready to Post"]
@@ -101,7 +104,7 @@ Before creating anything in OpusClip, code checks:
 - The file isn't already processed for this campaign (dedupe on a stable source key such as the Drive file ID or YouTube video ID)
 - Size/duration are within OpusClip limits (10 hours / 30 GB) and the campaign's limits
 - The campaign is active and confirmed
-- The daily and per-campaign credit budgets allow it
+- The daily and per-campaign credit budgets, and OpusClip's remaining monthly credits, allow it
 
 If validation fails, the job goes to **Needs Attention** with a clear reason. It never silently disappears or retries forever.
 
@@ -410,8 +413,8 @@ Before starting a project:
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). In short:
 
-- **Code** (`clipper` CLI + Postgres + a Render cron running `clipper sync`): Content Rewards parsing, footage listing, OpusClip submit/poll with idempotency and a credit budget, objective checks, caption validation, packaging to R2, notifications, the audit log.
-- **Claude operator** (Claude Code Routine following `.claude/skills/clipper-operator/`): scouting, brief reading, config drafting, footage selection, candidate pre-screen, caption drafting, Needs Attention triage.
+- **Code** (`clipper` CLI + Postgres): Content Rewards parsing, footage listing, the credit ledger that must approve every OpusClip submission (enforced by a hook), objective checks, caption validation, packaging to R2, notifications, the audit log.
+- **Claude operator** (Claude Code Routine following `.claude/skills/clipper-operator/`, with the OpusClip connector): scouting, brief reading, config drafting, footage selection, submitting to OpusClip and collecting clips, transcript-based pre-screen, caption drafting, reviewer-requested clip fixes, Needs Attention triage.
 - **You** (review web app): join campaigns, confirm configs, approve clips, post, record results.
 
 ---
