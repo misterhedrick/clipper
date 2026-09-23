@@ -52,6 +52,8 @@ A Claude Code Routine on this repository that runs the `clipper-operator` skill 
 - **Fails closed.** The submit guard hook runs through the same path, and anything but an explicit allow blocks the submission.
 - **Proxy-aware.** The client uses undici's `EnvHttpProxyAgent`, so it honours `HTTPS_PROXY` / `NO_PROXY`.
 
+**Verified live 2026-09-23** from a Claude cloud session, through its HTTPS proxy: `campaign list` / `attention list` run against Supabase via Render; the real guard hook blocks an unreserved submission (exit 2); a wrong token is refused.
+
 Because commands now run on Render, **their configuration lives on Render too**: `OPUSCLIP_DAILY_CREDIT_BUDGET`, `NOTIFY_WEBHOOK_URL`, `REVIEW_URL` and the R2 key pair (with write access, for `clipper package`) go in the web service's environment.
 
 The Routine's environment needs:
