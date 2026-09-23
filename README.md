@@ -6,7 +6,7 @@ The goal is simple:
 
 > Pick a Content Rewards campaign → Claude reads the brief and finds the footage → OpusClip generates clips → Claude pre-screens and drafts captions → you approve → you post.
 
-It's run by a **Claude operator**, a scheduled Claude Code session that follows a playbook (`.claude/skills/clipper-operator/`). Claude does the reading and judgment; a small `clipper` CLI and database do everything that must be exact, idempotent or safe. You keep every decision that commits to a campaign, spends credits beyond the budget, or publishes.
+It's run by a **Claude operator**, a Claude Code session you start on demand (manual only: nothing runs on a schedule) that follows a playbook (`.claude/skills/clipper-operator/`). Claude does the reading and judgment; a small `clipper` CLI and database do everything that must be exact, idempotent or safe. You keep every decision that commits to a campaign, spends credits beyond the budget, or publishes.
 
 > **Status & direction:** see [`docs/ROADMAP.md`](docs/ROADMAP.md) for how the whole process will work, what's built (tasks 0–8, Milestone A done), what's next, and what's needed from you.
 
@@ -414,7 +414,7 @@ Before starting a project:
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). In short:
 
 - **Code** (`clipper` CLI + Postgres): Content Rewards parsing, footage listing, the credit ledger that must approve every OpusClip submission (enforced by a hook), objective checks, caption validation, packaging to R2, notifications, the audit log.
-- **Claude operator** (Claude Code Routine following `.claude/skills/clipper-operator/`, with the OpusClip connector): scouting, brief reading, config drafting, footage selection, submitting to OpusClip and collecting clips, transcript-based pre-screen, caption drafting, reviewer-requested clip fixes, Needs Attention triage.
+- **Claude operator** (a Claude Code session you start, following `.claude/skills/clipper-operator/`, with the OpusClip connector): scouting, brief reading, config drafting, footage selection, submitting to OpusClip and collecting clips, transcript-based pre-screen, caption drafting, reviewer-requested clip fixes, Needs Attention triage.
 - **You** (review web app): join campaigns, confirm configs, approve clips, post, record results.
 
 ---
@@ -423,7 +423,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). In short:
 
 ### Phase 1 — Operator loop, ingestion and review
 
-The ordered task list is in [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md): the `clipper` CLI, brief reading, footage sources, OpusClip submit/sync with a credit budget, caption validation, the review web app, packaging, notifications, and the operator Routine.
+The ordered task list is in [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md): the `clipper` CLI, brief reading, footage sources, OpusClip submit/sync with a credit budget, caption validation, the review web app, packaging, notifications, and deployment.
 
 Do not build automated social posting yet.
 

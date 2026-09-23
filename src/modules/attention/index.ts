@@ -5,7 +5,7 @@ import { auditLog, campaigns, sourceJobs, statusEvents, type EntityType } from "
 
 // Everything waiting on a person or on triage, and the notification digest for
 // it. An item is notified once per status change: the digest records which
-// status event it announced, so the same failure isn't re-sent every hour, but
+// status event it announced, so the same failure isn't re-sent on every run, but
 // a job that fails again later is.
 
 export const ATTENTION_JOB_STATUSES = ["needs_attention", "validation_failed", "submit_failed"] as const;

@@ -4,7 +4,10 @@
       "mcp__OpusClip__opusclip_create_post_task",
       "mcp__OpusClip__opusclip_schedule_publish",
       "mcp__OpusClip__opusclip_unschedule_publish",
-      "mcp__OpusClip__opusclip_share_project"
+      "mcp__OpusClip__opusclip_share_project",
+      "mcp__Claude_Code_Remote__create_trigger",
+      "mcp__Claude_Code_Remote__update_trigger",
+      "mcp__Claude_Code_Remote__send_later"
     ]
   },
   "hooks": {
