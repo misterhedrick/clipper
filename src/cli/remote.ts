@@ -22,6 +22,20 @@ export type RemoteOptions = {
   sleep?: (ms: number) => Promise<void>;
 };
 
+/** The deployed review app. Not a secret; CLIPPER_REMOTE_URL overrides it. */
+export const DEFAULT_REMOTE_URL = "https://clipper-review.onrender.com";
+
+/**
+ * Where commands run. Remote mode is on when an operator token is present (the
+ * cloud operator's environment); without one, the CLI uses the local database.
+ */
+export function remoteTarget(env: NodeJS.ProcessEnv): { url: string; token: string } | undefined {
+  const token = env.CLIPPER_OPERATOR_TOKEN?.trim();
+  const url = env.CLIPPER_REMOTE_URL?.trim();
+  if (!token && !url) return undefined;
+  return { url: url || DEFAULT_REMOTE_URL, token: token ?? "" };
+}
+
 const FILE_OPTIONS = ["--file", "--ops-file"];
 const LONG_COMMANDS = new Set(["package"]);
 
