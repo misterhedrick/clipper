@@ -2,7 +2,7 @@
 
 **Start here.** This page says where the project is going, how the whole process will work when it's done, and exactly where it stands today. It's the summary; the detail lives in the docs it links to.
 
-*Last updated: 2026-09-23 · tasks 0–10 built; live checks for 8–9 pending*
+*Last updated: 2026-09-23 · tasks 0–11 built; live checks for 8–9 pending*
 
 ---
 
@@ -26,7 +26,7 @@ So the design became **code for guarantees, Claude for judgment, people for deci
 |---|---|---|
 | **Code** | Anything that must be exact or safe: the database, dedupe, credit budget, caption rule checks, the approval gate, the audit log | The `clipper` CLI + Postgres |
 | **Claude** | Reading and deciding: scouting campaigns, turning briefs into configs, picking footage, pre-screening clips, drafting captions, triaging problems | A scheduled Claude Code session following the playbook in [`.claude/skills/clipper-operator/`](../.claude/skills/clipper-operator/SKILL.md), acting only through the CLI and the **OpusClip connector** |
-| **You** | Joining campaigns, confirming each campaign's config once, approving clips, posting | Content Rewards, and the review web page (not built yet) |
+| **You** | Joining campaigns, confirming each campaign's config once, approving clips, posting | Content Rewards, and the review web page |
 
 OpusClip is reached through its **connector** (MCP, Pro plan) from Claude's session rather than an API client in our code. The connector also gives Claude transcripts for pre-screening and tools to fix clips a reviewer sends back.
 
@@ -54,7 +54,8 @@ Claude runs this loop **hourly** as a Claude Code Routine and ends each run with
 
 | Rail | How it's enforced | Status |
 |---|---|---|
-| Only a person can activate a campaign or approve, reject or edit a clip | `transition()` refuses those status changes unless the actor is `reviewer:<you>`, and the CLI has no such commands | ✅ built + tested |
+| Only a person can activate a campaign or approve, reject or edit a clip | `transition()` refuses those status changes unless the actor is `reviewer:<you>`; the review module refuses non-reviewers too; the only `reviewer:` actor comes from a signed-in web session; the CLI has no such commands | ✅ built + tested |
+| Nothing gets approved without a compliant caption, or over a failed check without an explicit override | review module | ✅ built + tested |
 | No OpusClip spend without a reservation | A hook checks every connector submit against an open reservation's exact parameters; anything else is blocked | ✅ built + tested end to end |
 | Budget can't be overspent | Daily budget, per-campaign cap and OpusClip's remaining credits are checked under a DB lock | ✅ built + tested under concurrency |
 | One OpusClip project per video | Unique `(campaign, video)` key + one open reservation per job + `clipper:<jobId>` titles for crash recovery | ✅ built + tested |
@@ -81,14 +82,16 @@ Claude runs this loop **hourly** as a Claude Code Routine and ends each run with
 | 8 | Credit ledger + submit protocol + guard hook | ✅ code · ⏳ live 10-credit test |
 | 9 | Collect clips from OpusClip + objective checks (`candidate upsert`) | ✅ code · ⏳ live check (real clip field names) |
 | 10 | Caption validation + pre-screen + reviewer-requested edits | ✅ |
-| 11 | Review web page (confirm configs, approve clips, record posts) | ⏳ next |
-| 12 | Ready-to-Post packaging to R2 + notifications | ⏳ |
+| 11 | Review web page (confirm configs, approve clips, record posts) | ✅ |
+| 12 | Ready-to-Post packaging to R2 + notifications | ⏳ next |
 | 13 | Deploy: Render (web + Postgres) + hourly Claude Routine | ⏳ |
 | 14 | End to end on a real campaign, twice (idempotency) | ⏳ |
 
 **Milestone A (Claude can read campaigns) is done.** Claude can scout, add, classify, read briefs, propose configs and choose footage, all through the CLI, with nothing spent.
 
-**Milestone B (clips get made) is built; its live check is pending.** Reserve → submit → collect → check → pre-screen → caption → reviewer-requested edits all work against fixtures. What's left is one real 10-credit run, which needs an `active` campaign, and only a person can activate one (task 11).
+**Milestone B (clips get made) is built; its live check is pending.** Reserve → submit → collect → check → pre-screen → caption → reviewer-requested edits all work against fixtures. What's left is one real 10-credit run. It's no longer blocked on code: the review page (task 11) can now activate a campaign, so it waits on you joining the campaign and OK'ing the credits (§7).
+
+**Milestone C is half done:** the review page is built (task 11). Packaging and notifications (task 12) are next.
 
 ### Milestones
 
@@ -96,7 +99,7 @@ Claude runs this loop **hourly** as a Claude Code Routine and ends each run with
 |---|---|---|---|
 | **A. Claude can read campaigns** | 3–7 | Scout → brief → config → footage | No · ✅ done |
 | **B. Clips get made** | 8–10 | Submit to OpusClip within budget, collect and pre-screen clips | OpusClip credits · built, live check pending |
-| **C. Review and packages** | 11–12 | Your review page, clip bundles, notifications | Storage (small) |
+| **C. Review and packages** | 11–12 | Your review page, clip bundles, notifications | Storage (small) · review page ✅, packaging next |
 | **D. Runs itself** | 13–14 | Hosted, scheduled, proven on a real campaign | Hosting |
 
 ### Verified against the real world
@@ -116,9 +119,9 @@ Claude runs this loop **hourly** as a Claude Code Routine and ends each run with
 
 ## 6. What's next
 
-1. **Task 11:** the review web page. Confirming a campaign there is what makes it `active`, which unblocks the first real OpusClip test. Approving/rejecting clips and recording posts come in the same task.
-2. **First real test (closes out tasks 8 and 9):** a 10-minute slice (~10 credits) of a Charlie Berens special: reserve → submit → collect (`candidate upsert`) → pre-screen → caption. On that first upsert, check the real `opusclip_list_clips` field names and stage values against the parser (`src/modules/candidates/opusclip.ts`), and narrow it to what OpusClip actually sends.
-3. **Task 12:** Ready-to-Post packaging to R2, `record-export`, and notifications.
+1. **First real test (closes out tasks 8 and 9), as soon as you give the go-ahead in §7.** Run the review page locally (`npm run dev:api`) and confirm the Charlie Berens config. Then an operator run does a 10-minute slice (~10 credits): reserve → submit → collect (`candidate upsert`) → pre-screen → caption. On that first upsert, check the real `opusclip_list_clips` field names and stage values against the parser (`src/modules/candidates/opusclip.ts`), and narrow it to what OpusClip actually sends.
+2. **Task 12:** `candidate record-export`, Ready-to-Post packaging to R2, and notifications. This needs the R2 bucket and webhook from §7.
+3. **Task 13:** deploy to Render and schedule the hourly operator Routine.
 
 ## 7. Decisions and inputs needed from you
 
@@ -137,6 +140,7 @@ Claude runs this loop **hourly** as a Claude Code Routine and ends each run with
 - **Video length is unknown** before submitting, so credits are held at a 90-minute estimate unless a range or length is given. `credits reconcile` corrects the ledger from OpusClip's real usage.
 - **No automated posting.** It's out of scope for v1 by design.
 - **Clip field names not yet seen live.** No OpusClip project existed when `candidate upsert` was built, so its parser accepts several spellings of each field. The first real run confirms which one OpusClip uses.
+- **One shared reviewer token.** The review page signs in with a name + `REVIEWER_TOKEN`, so the name is self-declared. Per-person accounts are a Phase 2 item.
 - **Disclosures always go on their own line.** The config has no per-campaign switch; every `disclosureLines` entry must be a line of its own.
 
 ## 9. Where to read more

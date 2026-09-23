@@ -14,7 +14,7 @@ try {
 }
 
 const { db, pool } = createDb(config.DATABASE_URL);
-const app = buildApp({ db });
+const app = buildApp({ db, reviewerToken: config.REVIEWER_TOKEN });
 
 const shutdown = async () => {
   await app.close();
