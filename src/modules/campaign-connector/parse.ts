@@ -60,8 +60,11 @@ export function extractRscPayload(html: string): string {
   return payload;
 }
 
-/** Given `text[start] === "{"`, returns the index just past its matching `}`, or -1. */
-function matchObjectEnd(text: string, start: number): number {
+/**
+ * Given `text[start]` is `{` or `[`, returns the index just past its matching close, or -1.
+ * String-aware, so braces inside JSON strings don't count.
+ */
+function matchBracketEnd(text: string, start: number): number {
   let depth = 0;
   let inString = false;
   for (let i = start; i < text.length; i++) {
@@ -70,8 +73,8 @@ function matchObjectEnd(text: string, start: number): number {
       if (c === "\\") i++;
       else if (c === '"') inString = false;
     } else if (c === '"') inString = true;
-    else if (c === "{") depth++;
-    else if (c === "}" && --depth === 0) return i + 1;
+    else if (c === "{" || c === "[") depth++;
+    else if ((c === "}" || c === "]") && --depth === 0) return i + 1;
   }
   return -1;
 }
@@ -91,7 +94,7 @@ export function findCampaignObject(payload: string, campaignId: string): Record<
     let tries = 0;
     for (let start = payload.lastIndexOf("{", at); start !== -1 && tries < MAX_OBJECT_START_CANDIDATES; start = payload.lastIndexOf("{", start - 1)) {
       tries++;
-      const end = matchObjectEnd(payload, start);
+      const end = matchBracketEnd(payload, start);
       if (end <= at) continue; // this brace closes before the id; not an enclosing object
       try {
         const obj: unknown = JSON.parse(payload.slice(start, end));
@@ -231,4 +234,101 @@ export function parseCampaignPageHtml(html: string, campaignId: string): Campaig
     driveFolderUrl,
     driveFolderId: driveFolderUrl ? parseDriveFolderId(driveFolderUrl) : null,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Discover listing (`GET /discover`): every listed campaign, with the listing's
+// own summary fields (its `description` is filled in more often than the
+// individual page's).
+
+const listingItemSchema = z.object({
+  id: z.string().regex(UUID),
+  title: z.string(),
+  description: z.string().nullish(),
+  brand: z.string().nullish(),
+  category: z.string().nullish(),
+  platforms: z.array(z.string()).default([]),
+  type: z.string().nullish(),
+  payoutSortRaw: z.number().nullish(),
+  budgetTotalRaw: z.number().nullish(),
+  budgetSpentRaw: z.number().nullish(),
+  availableBudgetRaw: z.number().nullish(),
+  progressPercentage: z.number().nullish(),
+  requiresApplication: z.boolean().nullish(),
+  isVerified: z.boolean().nullish(),
+  creatorCountRaw: z.number().nullish(),
+  submissionCountRaw: z.number().nullish(),
+  createdAtMs: z.number().nullish(),
+});
+
+export type ListedCampaign = {
+  campaignId: string;
+  url: string;
+  title: string;
+  description: string | null;
+  brand: string | null;
+  category: string | null;
+  platforms: string[];
+  payoutType: string | null;
+  /** Headline rate per 1K views, in dollars (the listing's sort key). */
+  ratePer1k: number | null;
+  budgetTotal: number | null;
+  budgetSpent: number | null;
+  budgetAvailable: number | null;
+  progressPercentage: number | null;
+  requiresApplication: boolean;
+  isVerified: boolean;
+  creatorCount: number | null;
+  submissionCount: number | null;
+  createdAt: string | null;
+};
+
+/** Parses the discover listing page into campaigns, or throws `parse_failed`. */
+export function parseDiscoverListingHtml(html: string): ListedCampaign[] {
+  const payload = extractRscPayload(html);
+  const key = payload.indexOf('"campaigns":[');
+  if (key === -1) {
+    throw new CampaignConnectorError("parse_failed", "No campaigns array found in discover listing payload");
+  }
+  const start = key + '"campaigns":'.length;
+  const end = matchBracketEnd(payload, start);
+  let items: unknown;
+  try {
+    items = JSON.parse(payload.slice(start, end));
+  } catch {
+    throw new CampaignConnectorError("parse_failed", "Discover listing campaigns array is not valid JSON");
+  }
+  const parsed = z.array(listingItemSchema).safeParse(items);
+  if (!parsed.success) {
+    throw new CampaignConnectorError(
+      "parse_failed",
+      `Listing campaign has unexpected shape: ${parsed.error.issues
+        .slice(0, 3)
+        .map((i) => i.path.join(".") + " " + i.message)
+        .join("; ")}`,
+    );
+  }
+  if (parsed.data.length === 0) {
+    throw new CampaignConnectorError("parse_failed", "Discover listing returned zero campaigns");
+  }
+  return parsed.data.map((c) => ({
+    campaignId: c.id.toLowerCase(),
+    url: `https://contentrewards.com/discover/${c.id.toLowerCase()}`,
+    title: c.title,
+    description: c.description ?? null,
+    brand: c.brand ?? null,
+    category: c.category || null,
+    platforms: c.platforms,
+    payoutType: c.type ?? null,
+    ratePer1k: c.payoutSortRaw ?? null,
+    budgetTotal: c.budgetTotalRaw ?? null,
+    budgetSpent: c.budgetSpentRaw ?? null,
+    budgetAvailable: c.availableBudgetRaw ?? null,
+    progressPercentage: c.progressPercentage ?? null,
+    requiresApplication: c.requiresApplication ?? false,
+    isVerified: c.isVerified ?? false,
+    creatorCount: c.creatorCountRaw ?? null,
+    submissionCount: c.submissionCountRaw ?? null,
+    createdAt: c.createdAtMs ? new Date(c.createdAtMs).toISOString() : null,
+  }));
 }

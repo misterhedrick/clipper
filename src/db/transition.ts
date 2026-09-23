@@ -161,3 +161,22 @@ export async function transition<E extends EntityType>(
     return { from, to };
   });
 }
+
+/**
+ * Audit row for an entity's *initial* status, written by the code that inserts
+ * it (in the same transaction). Inserts don't go through transition(): there's
+ * no previous status to validate against.
+ */
+export async function recordCreated<E extends EntityType>(
+  tx: Pick<Db, "insert">,
+  input: { entity: E; id: string; status: StatusOf[E]; actor: string; reason?: string },
+): Promise<void> {
+  await tx.insert(statusEvents).values({
+    entityType: input.entity,
+    entityId: input.id,
+    fromStatus: null,
+    toStatus: input.status,
+    actor: input.actor,
+    reason: input.reason ?? null,
+  });
+}

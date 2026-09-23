@@ -2,7 +2,9 @@ import {
   CampaignConnectorError,
   parseCampaignIdFromUrl,
   parseCampaignPageHtml,
+  parseDiscoverListingHtml,
   type CampaignMetadata,
+  type ListedCampaign,
 } from "./parse.js";
 
 export {
@@ -12,6 +14,7 @@ export {
   type CampaignConnectorErrorCode,
   type CampaignMetadata,
   type CampaignPayout,
+  type ListedCampaign,
   type ReferenceMaterial,
 } from "./parse.js";
 
@@ -64,4 +67,23 @@ export async function fetchCampaign(url: string, deps: ConnectorDeps = {}): Prom
     throw new CampaignConnectorError("fetch_failed", `GET ${pageUrl} returned HTTP ${res.status}`);
   }
   return parseCampaignPageHtml(await res.text(), campaignId);
+}
+
+/** Every campaign currently on the Content Rewards discover page. */
+export async function fetchDiscoverListing(deps: ConnectorDeps = {}): Promise<ListedCampaign[]> {
+  const url = `${BASE_URL}/discover`;
+  const res = await get(deps.fetch ?? fetch, url);
+  if (!res.ok) {
+    throw new CampaignConnectorError("fetch_failed", `GET ${url} returned HTTP ${res.status}`);
+  }
+  return parseDiscoverListingHtml(await res.text());
+}
+
+/** Like parseCampaignIdFromUrl, but returns null instead of throwing for non-Content-Rewards input. */
+export function parseCampaignIdFromUrlSafe(input: string): string | null {
+  try {
+    return parseCampaignIdFromUrl(input);
+  } catch {
+    return null;
+  }
 }

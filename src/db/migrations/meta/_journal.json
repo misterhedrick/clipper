@@ -22,6 +22,13 @@
       "when": 1790121738672,
       "tag": "0002_schema_v2",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790121965569,
+      "tag": "0003_snapshot_and_audit_log",
+      "breakpoints": true
     }
   ]
 }

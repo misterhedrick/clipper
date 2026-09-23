@@ -24,11 +24,12 @@ Content Rewards URL → metadata + reference materials. Live canary test: `RUN_N
 - **Done when:** migrations apply on top of v1. The duplicate `(campaign_id, source_key)` test passes. A test proves `transition()` writes the audit row atomically: a forced failure after the update leaves neither the update nor the event.
 - **Outcome:** migrations `0001`/`0002` apply in order on an empty DB; `transition()` also enforces allowed transitions and **human-only** moves (campaign → `active`, clip approve/edit/reject/posted need a `reviewer:` actor); a static test blocks status writes outside `transition()`. Config now loads per section (`db`, `server`, `credits`, `r2`, `notify`).
 
-## 4. CLI skeleton + campaign commands
+## 4. CLI skeleton + campaign commands ✅ done
 - `clipper` bin: JSON on stdout, `{error:{code,message}}` + non-zero exit on failure, `actor = 'claude-operator'` on every write.
 - `campaign scout | add | show | list | classify | flag`.
 - `scout` parses the discover listing page (same RSC approach as `campaign-connector`; the listing has better `description` data).
 - **Done when:** `clipper campaign add <MW4 url>` creates a row, a second `add` is a no-op returning the same ID, and `scout` lists ~50 campaigns with titles and platforms (network test).
+- **Outcome:** verified live (add → created, re-add via `/campaigns/` URL → same ID, scout → 50 listed). Added migration `0003`: `campaigns.cr_snapshot` (payouts/budget/reference materials for the operator) and `audit_log` for non-status writes. `npx clipper …` runs via `bin/clipper`. `guard submit` exists as a stub that blocks every submission until task 8.
 
 ## 5. `brief-reader` + `campaign brief`
 - Fetch the doc as `export?format=html`. Return the plain text **and** every hyperlink, unwrapping `google.com/url?q=` redirects. `--doc <url>` reads a linked sub-doc.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fetchCampaign, resolveCampaignId } from "../../../src/modules/campaign-connector/index.js";
+import { fetchCampaign, fetchDiscoverListing, resolveCampaignId } from "../../../src/modules/campaign-connector/index.js";
 
 // Hits the real Content Rewards site. Skipped by default; run with
 //   RUN_NETWORK_TESTS=1 npm test -- live
@@ -21,5 +21,11 @@ describe.skipIf(!process.env.RUN_NETWORK_TESTS)("campaign-connector against live
     expect(campaign.guidelineDocId).toBeTruthy();
     // This campaign has no Drive folder in its reference materials (footage is linked from the doc).
     expect(campaign.driveFolderUrl === null || campaign.driveFolderId !== null).toBe(true);
+  });
+
+  it("parses the discover listing", { timeout: 30_000 }, async () => {
+    const listed = await fetchDiscoverListing();
+    expect(listed.length).toBeGreaterThanOrEqual(20);
+    expect(listed.every((c) => c.title && c.platforms.length > 0)).toBe(true);
   });
 });

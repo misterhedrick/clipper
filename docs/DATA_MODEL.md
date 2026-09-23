@@ -113,6 +113,11 @@ Manual-posting tracking (README § "Post manually in version one").
 | `earnings` | numeric | |
 | `notes` | text | |
 
+## v3 changes (migration `0003_snapshot_and_audit_log`)
+
+- `campaigns.cr_snapshot jsonb`, `cr_snapshot_at`: the full `campaign-connector` result at `campaign add` time (payouts, budget, reference materials, Content Rewards' own status). The operator reads it while scouting and onboarding.
+- `audit_log` (`entity_type`, `entity_id`, `action`, `actor`, `details jsonb`): the audit trail for writes that aren't status changes. `entity_type` is `campaign | source_job | candidate_clip | footage_source | credits`.
+
 ## Status changes: `transition()`
 
 `src/db/transition.ts` is the only code that writes a `status` column. A static test fails the build if any other file does. Each call:

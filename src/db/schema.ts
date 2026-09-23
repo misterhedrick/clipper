@@ -88,6 +88,9 @@ export type CreditReservationStatus = (typeof CREDIT_RESERVATION_STATUSES)[numbe
 export const ENTITY_TYPES = ["campaign", "source_job", "candidate_clip"] as const;
 export type EntityType = (typeof ENTITY_TYPES)[number];
 
+export const AUDIT_ENTITY_TYPES = [...ENTITY_TYPES, "footage_source", "credits"] as const;
+export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
+
 export const POST_PLATFORMS = ["tiktok", "instagram", "youtube"] as const;
 export type PostPlatform = (typeof POST_PLATFORMS)[number];
 
@@ -145,6 +148,10 @@ export const campaigns = pgTable(
     brand: text("brand"),
     platforms: text("platforms").array(),
     guidelineDocUrl: text("guideline_doc_url"),
+    // What campaign-connector returned when the campaign was added (payouts, budget,
+    // reference materials, Content Rewards' own status). Read by scouting/onboarding.
+    crSnapshot: jsonb("cr_snapshot").$type<Record<string, unknown>>(),
+    crSnapshotAt: timestamp("cr_snapshot_at", { withTimezone: true }),
     campaignType: text("campaign_type").$type<CampaignType>(),
     campaignTypeReason: text("campaign_type_reason"),
     maxDailyCredits: integer("max_daily_credits"),
@@ -277,6 +284,26 @@ export const statusEvents = pgTable(
   (t) => [
     index("status_events_entity_idx").on(t.entityType, t.entityId),
     check("status_events_entity_type_check", inList("entity_type", ENTITY_TYPES)),
+  ],
+);
+
+/**
+ * Audit trail for writes that aren't status changes (classify, add footage, set caption, …).
+ * Status changes are audited in status_events by transition().
+ */
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    ...baseColumns(),
+    entityType: text("entity_type").$type<AuditEntityType>().notNull(),
+    entityId: uuid("entity_id"),
+    action: text("action").notNull(),
+    actor: text("actor").notNull(),
+    details: jsonb("details").$type<Record<string, unknown>>(),
+  },
+  (t) => [
+    index("audit_log_entity_idx").on(t.entityType, t.entityId),
+    check("audit_log_entity_type_check", inList("entity_type", AUDIT_ENTITY_TYPES)),
   ],
 );
 

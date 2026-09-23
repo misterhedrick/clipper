@@ -80,15 +80,15 @@ The playbook tells Claude what to do. These invariants make sure a mistake in fo
 6. **No posting or sharing tools.** OpusClip's post, schedule and share tools are denied in `.claude/settings.json`.
 7. **Public sources only.** Listing and submit commands fetch anonymously. A sign-in wall becomes a `needs_attention` reason, never an auth attempt.
 8. **Caption validation.** `clipper candidate set-caption` rejects a caption that's missing any of the campaign's required phrases, tags or disclosures. Claude drafts, code verifies.
-9. **Every write is audited.** Each CLI mutation writes a `status_events` row with `actor = 'claude-operator'` (or the human's ID from the web app).
+9. **Every write is audited.** Status changes write `status_events` (via `transition()`); other writes (classify, add footage, captions, …) write `audit_log` in the same transaction. CLI writes are attributed to `claude-operator`, web-app writes to `reviewer:<identity>`.
 
 ## `clipper` CLI contract
 
-Every command prints JSON to stdout so the playbook can act on it. Exit code is non-zero on failure, with `{ "error": { "code", "message" } }`. Commands marked (r) are read-only.
+Run as `npx clipper <group> <command>` from the repo (`bin/clipper` runs the TypeScript source via tsx, so there's no stale build). Every command prints JSON to stdout so the playbook can act on it. Exit code is non-zero on failure, with `{ "error": { "code", "message" } }`; codes include `usage`, `invalid_argument`, `not_found`, `invalid_transition`, `human_only`, `config`, and the connector's `invalid_url` / `fetch_failed` / `parse_failed`. Commands marked (r) are read-only. `clipper help` lists everything. Campaign arguments accept our ID, the Content Rewards campaign ID, or its URL.
 
 ```
 # Campaigns
-clipper campaign scout                          (r) list discover campaigns + parsed metadata, not yet tracked
+clipper campaign scout [--all]                  (r) discover-page campaigns (rate/1K, budget, platforms, description, application); untracked only unless --all
 clipper campaign add <contentRewardsUrl>            track a campaign (status: discovered); runs campaign-connector
 clipper campaign show <id>                      (r) campaign row + config + footage sources + counts
 clipper campaign list [--status s]              (r)
