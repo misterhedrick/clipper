@@ -12,8 +12,11 @@ import { candidateCommands } from "./commands/candidate.js";
 import { guardCommands } from "./commands/guard.js";
 import { footageCommands } from "./commands/footage.js";
 import { creditsCommands, sourceCommands } from "./commands/source.js";
+import { attentionCommands, notifyCommands, packageCommands } from "./commands/ops.js";
 import { SubmissionError } from "../modules/submissions/index.js";
 import { CandidatesError } from "../modules/candidates/index.js";
+import { PackagingError, type BundleStore } from "../modules/packaging/index.js";
+import { NotifyError } from "../modules/notifier/index.js";
 import { FootageError } from "../modules/footage-sources/index.js";
 import { SourcingError } from "../modules/sourcing/index.js";
 
@@ -32,6 +35,8 @@ export type CommandContext = {
   options: Record<string, string | boolean | undefined>;
   stdin: () => Promise<string>;
   env: NodeJS.ProcessEnv;
+  /** Bundle storage override (tests); commands otherwise build the R2 store from config. */
+  bundleStore?: BundleStore;
 };
 
 export type Command = {
@@ -49,6 +54,9 @@ const groups: Record<string, Record<string, Command>> = {
   source: sourceCommands,
   credits: creditsCommands,
   candidate: candidateCommands,
+  package: packageCommands,
+  notify: notifyCommands,
+  attention: attentionCommands,
   guard: guardCommands,
 };
 
@@ -57,6 +65,7 @@ export type RunDeps = {
   db?: Db;
   connector?: ConnectorDeps;
   stdin?: () => Promise<string>;
+  bundleStore?: BundleStore;
 };
 
 export type RunResult = { exitCode: number; output: unknown };
@@ -83,8 +92,10 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<RunResult
   if (!group || group === "help" || group === "--help") return { exitCode: 0, output: help() };
   // A group may have a default command (e.g. `clipper credits`); options can follow it directly.
   const useDefault = maybeName === undefined || maybeName.startsWith("--");
-  const name = useDefault ? "" : maybeName;
-  const rest = useDefault && maybeName !== undefined ? [maybeName, ...more] : more;
+  // A default command may also take positionals (`clipper package <id>`) when no subcommand has that name.
+  const positionalDefault = !useDefault && !groups[group]?.[maybeName] && groups[group]?.[""] !== undefined;
+  const name = useDefault || positionalDefault ? "" : maybeName;
+  const rest = (useDefault && maybeName !== undefined) || positionalDefault ? [maybeName!, ...more] : more;
   const command = groups[group]?.[name];
   if (!command) return errorResult("usage", `Unknown command: ${[group, name].filter(Boolean).join(" ")}. Run \`clipper help\`.`);
 
@@ -113,6 +124,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<RunResult
     options: parsed.values as CommandContext["options"],
     stdin: deps.stdin ?? readStdin,
     env: deps.env ?? process.env,
+    bundleStore: deps.bundleStore,
   };
 
   try {
@@ -134,7 +146,9 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<RunResult
       err instanceof BriefReaderError ||
       err instanceof FootageError ||
       err instanceof SourcingError ||
-      err instanceof SubmissionError
+      err instanceof SubmissionError ||
+      err instanceof PackagingError ||
+      err instanceof NotifyError
     ) {
       return errorResult(err.code, err.message);
     }

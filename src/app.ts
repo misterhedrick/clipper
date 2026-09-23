@@ -2,11 +2,12 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { sql } from "drizzle-orm";
 import type { Db } from "./db/client.js";
 import { registerReviewRoutes } from "./web/routes.js";
+import type { BundleStore } from "./modules/packaging/index.js";
 
 /** Without a reviewerToken the app serves only /health (no review pages). */
-export type AppDeps = { db: Db; reviewerToken?: string; now?: () => Date };
+export type AppDeps = { db: Db; reviewerToken?: string; now?: () => Date; bundles?: BundleStore };
 
-export function buildApp({ db, reviewerToken, now }: AppDeps): FastifyInstance {
+export function buildApp({ db, reviewerToken, now, bundles }: AppDeps): FastifyInstance {
   const app = Fastify({ logger: process.env.NODE_ENV !== "test" });
 
   // Render's healthCheckPath: 200 only once the database is actually reachable.
@@ -20,7 +21,7 @@ export function buildApp({ db, reviewerToken, now }: AppDeps): FastifyInstance {
     }
   });
 
-  if (reviewerToken) registerReviewRoutes(app, { db, reviewerToken, now });
+  if (reviewerToken) registerReviewRoutes(app, { db, reviewerToken, now, bundles });
 
   return app;
 }

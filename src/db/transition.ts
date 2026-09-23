@@ -79,6 +79,17 @@ const humanOnly: { [E in EntityType]: readonly StatusOf[E][] } = {
   candidate_clip: ["approved", "needs_edit", "rejected", "posted"],
 };
 
+/**
+ * Moves into a human-only status that automation may still make, because they
+ * return to a decision a person already took rather than make a new one:
+ * a failed packaging run (exporting, only reachable from approved) goes back to approved.
+ */
+const humanOnlyReverts: { [E in EntityType]: Partial<Record<StatusOf[E], readonly StatusOf[E][]>> } = {
+  campaign: {},
+  source_job: {},
+  candidate_clip: { approved: ["exporting"] },
+};
+
 /** Human actors are recorded as `reviewer:<identity>`. Anything else is automation. */
 export const isHumanActor = (actor: string) => /^reviewer:\S+$/.test(actor);
 
@@ -140,7 +151,8 @@ export async function transition<E extends EntityType>(
     if (!targets.includes(to)) {
       throw new TransitionError("invalid_transition", `${entity} ${id} cannot go from ${from} to ${to}`);
     }
-    if ((humanOnly[entity] as readonly string[]).includes(to) && !isHumanActor(actor)) {
+    const revert = ((humanOnlyReverts[entity] as Record<string, readonly string[] | undefined>)[to] ?? []).includes(from);
+    if ((humanOnly[entity] as readonly string[]).includes(to) && !revert && !isHumanActor(actor)) {
       throw new TransitionError("human_only", `only a reviewer can move a ${entity} to ${to} (actor: ${actor})`);
     }
 

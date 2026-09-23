@@ -6,6 +6,7 @@ import { auditLog, campaigns, candidateClips, posts, sourceJobs, statusEvents } 
 import { transition } from "../../src/db/transition.js";
 import { confirmCampaign, decideCandidate } from "../../src/modules/review/index.js";
 import { createSession } from "../../src/web/auth.js";
+import { r2Store } from "../../src/modules/packaging/r2.js";
 import { resetTestDatabase, TEST_DATABASE_URL, truncateAll } from "../helpers/db.js";
 import { validConfig } from "../helpers/config.js";
 import { insertCampaign, insertSourceJob } from "../helpers/fixtures.js";
@@ -254,6 +255,17 @@ describe.skipIf(!TEST_DATABASE_URL)("review web app", () => {
       expect(rows.find((r) => r.platform === "tiktok")).toMatchObject({ views: 5000, earnings: "8.75" });
       expect(await events(candidateId, "posted")).toEqual([expect.objectContaining({ actor: "reviewer:alex" })]);
     });
+  });
+
+  it("links a packaged clip's bundle files with signed, expiring URLs", async () => {
+    const withR2 = buildApp({ db, reviewerToken: TOKEN, bundles: r2Store({ R2_ACCOUNT_ID: "acct", R2_ACCESS_KEY_ID: "k", R2_SECRET_ACCESS_KEY: "s", R2_BUCKET_NAME: "clips" }) });
+    await db.update(candidateClips).set({ packageKey: "ready-to-post/x/y/", packagedAt: new Date() }).where(eq(candidateClips.id, candidateId));
+    const cookie = `clipper_session=${createSession(TOKEN, "alex")}`;
+    const res = await withR2.inject({ method: "GET", url: `/candidates/${candidateId}`, headers: { cookie } });
+    for (const f of ["final.mp4", "caption.txt", "thumbnail.jpg", "clip-metadata.json"]) {
+      expect(res.body).toMatch(new RegExp(`href="https://acct\\.r2\\.cloudflarestorage\\.com/clips/ready-to-post/x/y/${f.replace(".", "\\.")}\\?[^"]*X-Amz-Signature=`));
+    }
+    await withR2.close();
   });
 
   it("renders every page for a signed-in reviewer", async () => {

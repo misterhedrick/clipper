@@ -125,7 +125,7 @@ Manual-posting tracking (README § "Post manually in version one").
 `src/db/transition.ts` is the only code that writes a `status` column. A static test fails the build if any other file does. Each call:
 - locks the row (`SELECT … FOR UPDATE`), so concurrent transitions serialize;
 - checks the change is in that entity's allowed-transition table (e.g. a source job can't jump from `detected` to `completed`);
-- refuses **human-only** targets unless the actor is `reviewer:<identity>`: campaign → `active`; candidate → `approved`, `needs_edit`, `rejected`, `posted`. The operator (`claude-operator`) and `system` can never make these moves, whatever calls them;
+- refuses **human-only** targets unless the actor is `reviewer:<identity>`: campaign → `active`; candidate → `approved`, `needs_edit`, `rejected`, `posted`. The operator (`claude-operator`) and `system` can never make these moves, whatever calls them. The one exception is a revert to a decision a person already made: a failed packaging run goes `exporting` → `approved` (and `exporting` is only reachable from `approved`);
 - updates the row (and `status_reason` where the table has it) and inserts the `status_events` row in one transaction.
 
 ## Constraints enforced in the database
@@ -199,6 +199,10 @@ Unique: `(campaign_id, url)`.
 | `caption` | text | Validated against campaign requirements before it's stored |
 | `review_notes` | text | Reviewer notes from the web app (what to fix when `needs_edit`) |
 | `edit_log` | jsonb | Connector edits applied: `[{ops, reason, at}]` |
+
+### v4 changes (migration `0004_package_location`, BUILD_PLAN task 12)
+
+`candidate_clips`: add `package_key text` (the R2 prefix `clipper package` wrote the Ready-to-Post bundle under, e.g. `ready-to-post/<campaign>-<id8>/<clip>-<id8>/`) and `packaged_at timestamptz`.
 
 ### `credit_ledger` (new)
 
