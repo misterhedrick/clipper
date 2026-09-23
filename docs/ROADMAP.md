@@ -2,7 +2,7 @@
 
 **Start here.** This page says where the project is going, how the whole process will work when it's done, and exactly where it stands today. It's the summary; the detail lives in the docs it links to.
 
-*Last updated: 2026-09-23 · tasks 0–12 built, task 13 (deploy) in progress; live checks for 8, 9 and 12 pending*
+*Last updated: 2026-09-23 · tasks 0–13 built and deployed; live checks for 8, 9 and 12 pending · operator runs are **manual only***
 
 ---
 
@@ -25,7 +25,7 @@ So the design became **code for guarantees, Claude for judgment, people for deci
 | Who | Does what | How |
 |---|---|---|
 | **Code** | Anything that must be exact or safe: the database, dedupe, credit budget, caption rule checks, the approval gate, the audit log | The `clipper` CLI + Postgres |
-| **Claude** | Reading and deciding: scouting campaigns, turning briefs into configs, picking footage, pre-screening clips, drafting captions, triaging problems | A scheduled Claude Code session following the playbook in [`.claude/skills/clipper-operator/`](../.claude/skills/clipper-operator/SKILL.md), acting only through the CLI and the **OpusClip connector** |
+| **Claude** | Reading and deciding: scouting campaigns, turning briefs into configs, picking footage, pre-screening clips, drafting captions, triaging problems | A Claude Code session **you start** ("do an operator run"), following the playbook in [`.claude/skills/clipper-operator/`](../.claude/skills/clipper-operator/SKILL.md), acting only through the CLI and the **OpusClip connector** |
 | **You** | Joining campaigns, confirming each campaign's config once, approving clips, posting | Content Rewards, and the review web page |
 
 OpusClip is reached through its **connector** (MCP, Pro plan) from Claude's session rather than an API client in our code. The connector also gives Claude transcripts for pre-screening and tools to fix clips a reviewer sends back.
@@ -48,7 +48,7 @@ flowchart TD
   K --> M{"You: post, record the link"}
 ```
 
-You start this loop **by hand** ("do an operator run" in a Claude Code session; there's no scheduled Routine, decided 2026-09-23). Claude ends each run with a short report that starts with **what needs you**. There is no background worker or cron job: the OpusClip connector only exists inside a Claude session, so Claude's runs do the polling too, and nothing moves between runs.
+**Decided 2026-09-23: manual only.** Nothing runs on a schedule. An operator run happens only when you start one in a Claude Code session ("do an operator run"). Each run works through the loop above as far as it can and ends with a short report that starts with **what needs you**. There's no background worker, cron job or scheduled Claude Routine. OpusClip takes minutes to hours per video, so a run that submits footage can't collect the clips in the same go: start another run later to collect them. Nothing moves between runs except what you do on the review page.
 
 ## 4. Safety rails (enforced in code, not left to Claude)
 
@@ -86,7 +86,7 @@ You start this loop **by hand** ("do an operator run" in a Claude Code session; 
 | 10 | Caption validation + pre-screen + reviewer-requested edits | ✅ |
 | 11 | Review web page (confirm configs, approve clips, record posts) | ✅ |
 | 12 | Ready-to-Post packaging to R2 + notifications | ✅ code · ⏳ real bucket + webhook |
-| 13 | Deploy: Render web (free) + Supabase Postgres (free) + manual Claude operator runs | ✅ review page **live**; operator remote mode **live** (`CLIPPER_OPERATOR_TOKEN` set, daily budget 120); no Routine by decision; manual empty-queue run done 2026-09-23 (report: "Needs you: nothing"; posting it waits on the webhook, task 12) |
+| 13 | Deploy: Render web (free) + Supabase Postgres (free) + on-demand operator runs | ✅ review page **live**; operator remote mode **live and verified from a cloud session**; manual empty-queue run done 2026-09-23 (report: "Needs you: nothing"; posting it waits on the webhook, §7) |
 | 14 | End to end on a real campaign, twice (idempotency) | ⏳ |
 
 **Milestone A (Claude can read campaigns) is done.** Claude can scout, add, classify, read briefs, propose configs and choose footage, all through the CLI, with nothing spent.
@@ -102,7 +102,7 @@ You start this loop **by hand** ("do an operator run" in a Claude Code session; 
 | **A. Claude can read campaigns** | 3–7 | Scout → brief → config → footage | No · ✅ done |
 | **B. Clips get made** | 8–10 | Submit to OpusClip within budget, collect and pre-screen clips | OpusClip credits · built, live check pending |
 | **C. Review and packages** | 11–12 | Your review page, clip bundles, notifications | Storage (small) · built, needs your bucket + webhook |
-| **D. Runs for real** | 13–14 | Hosted, run by hand, proven on a real campaign | $0 on free tiers (Render web + Supabase); ~$7/mo if the review page should never sleep |
+| **D. Live** | 13–14 | Hosted, run on demand, proven on a real campaign | $0 on free tiers (Render web + Supabase); ~$7/mo if the review page should never sleep |
 
 ### Verified against the real world
 
@@ -119,15 +119,15 @@ You start this loop **by hand** ("do an operator run" in a Claude Code session; 
 | MW4 (Call of Duty) | `pending_confirmation` | Real caption rules drafted. **Footage is on MediaSilo, which OpusClip can't read**, and the campaign is paused on Content Rewards. |
 | Charlie Berens | `discovered`, classified long-form | Drive folder registered; one full special selected. **Best first real test.** |
 
-The **live database (Supabase) is empty** as of 2026-09-23: no campaigns, jobs or candidates. The rows above are local only, so the first real test starts by re-adding Charlie Berens through an operator run.
+The **live database (Supabase) is empty** as of 2026-09-23: no campaigns, jobs or candidates. The rows above are local only, so the first real test starts by re-adding Charlie Berens in an operator run.
 
 ## 6. What's next
 
 1. **First real test (closes out tasks 8, 9 and 12), once you've done the §7 items.**
-   1. An operator run adds and onboards Charlie Berens on the live database: read the brief, `propose-config` → `pending_confirmation`.
+   1. You start an operator run; it adds Charlie Berens to the live database and onboards it: read the brief, `propose-config` → `pending_confirmation`.
    2. You confirm the config on the review page (`npm run dev:api`).
-   3. The next operator run does a 10-minute slice (~10 credits): reserve → submit → collect (`candidate upsert`) → pre-screen → caption.
-   4. You approve a clip. The operator exports it and runs `clipper package`, and you get the bundle link.
+   3. You start another run; it does a 10-minute slice (~10 credits): reserve → submit. A later run you start collects the clips (`candidate upsert`), pre-screens them and drafts captions.
+   4. You approve a clip. The next run you start exports it and runs `clipper package`, and you get the bundle link.
 
    On the first upsert, check the real `opusclip_list_clips` field names and stage values against the parser (`src/modules/candidates/opusclip.ts`), and narrow it to what OpusClip actually sends.
 2. **Task 14:** end to end on a real campaign, twice, checking nothing duplicates.
@@ -137,8 +137,11 @@ The **live database (Supabase) is empty** as of 2026-09-23: no campaigns, jobs o
 | When | What |
 |---|---|
 | Before the first real test | Join the Charlie Berens campaign on Content Rewards, then OK spending ~10 credits on a 10-minute slice |
-| Before the first real test | A Cloudflare R2 bucket for clip bundles, with a bucket-scoped API token (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`), and a Slack or Discord incoming-webhook URL (`NOTIFY_WEBHOOK_URL`). The code is ready for both. |
-| ~~Now (task 13)~~ | ✅ done 2026-09-23: `CLIPPER_OPERATOR_TOKEN` is in the Claude cloud environment (checked with a live `clipper attention list`); the daily credit budget is **120** (`OPUSCLIP_DAILY_CREDIT_BUDGET` on Render, ≈ 2 hours of footage; the month's 900 credits ≈ 15 hours); **no hourly Routine**: operator runs are manual. |
+| Before the first real test | A Cloudflare R2 bucket for clip bundles, with a bucket-scoped API token (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`), and a Slack or Discord incoming-webhook URL (`NOTIFY_WEBHOOK_URL`), all set on Render. The code is ready for both. Until the webhook is set, `clipper attention notify` and `clipper notify` refuse, so run reports only appear in the Claude session. |
+| ~~Before running the operator from a cloud session~~ | ✅ done 2026-09-23: `CLIPPER_OPERATOR_TOKEN` is in the Claude cloud environment (checked with a live `clipper attention list`). |
+| About once a week | Start any operator run, or open the review page, so the free Supabase database doesn't pause after ~7 idle days. If it does pause, restore it from the Supabase dashboard. |
+
+**Decided:** operator runs are **manual only**: no scheduled Routine (2026-09-23). Daily OpusClip budget **120 credits** (≈2 h of footage/day; set on Render as `OPUSCLIP_DAILY_CREDIT_BUDGET`, 2026-09-23). The month's 900 credits could go in ~7 days at that rate; the reserve step also refuses anything over OpusClip's remaining monthly credits.
 
 ## 8. Known limits (v1)
 
@@ -148,7 +151,8 @@ The **live database (Supabase) is empty** as of 2026-09-23: no campaigns, jobs o
 - **Video length is unknown** before submitting, so credits are held at a 90-minute estimate unless a range or length is given. `credits reconcile` corrects the ledger from OpusClip's real usage.
 - **No automated posting.** It's out of scope for v1 by design.
 - **Clip field names not yet seen live.** No OpusClip project existed when `candidate upsert` was built, so its parser accepts several spellings of each field. The first real run confirms which one OpusClip uses.
-- **Free hosting sleeps.** The review page (Render free) takes ~30–60 s to wake after idling, and a Supabase free project pauses after ~7 days without activity. With manual runs, nothing keeps it awake: do an operator run (or open the review page) at least weekly, or unpause it in the Supabase dashboard.
+- **Free hosting sleeps.** The review page (Render free) takes ~30–60 s to wake after idling, and a Supabase free project pauses after ~7 days without activity. With manual-only runs, nothing keeps it awake: use it at least weekly, or restore it from the dashboard.
+- **Manual only means nothing moves on its own.** Clips OpusClip finishes, and clips you approve, wait until you start the next operator run.
 - **One shared reviewer token.** The review page signs in with a name + `REVIEWER_TOKEN`, so the name is self-declared. Per-person accounts are a Phase 2 item.
 - **Disclosures always go on their own line.** The config has no per-campaign switch; every `disclosureLines` entry must be a line of its own.
 
@@ -162,5 +166,5 @@ The **live database (Supabase) is empty** as of 2026-09-23: no campaigns, jobs o
 | [`BUILD_PLAN.md`](BUILD_PLAN.md) | Every task with its "done when" check and outcome |
 | [`DATA_MODEL.md`](DATA_MODEL.md) | Database schema and `transition()` rules |
 | [`API_CONTRACTS.md`](API_CONTRACTS.md) | Content Rewards, Google, YouTube, OpusClip connector details |
-| [`DEPLOYMENT.md`](DEPLOYMENT.md) | Render + Claude operator setup |
+| [`DEPLOYMENT.md`](DEPLOYMENT.md) | Render + Supabase setup, and running the operator |
 | [`.claude/skills/clipper-operator/`](../.claude/skills/clipper-operator/SKILL.md) | The playbook Claude follows |

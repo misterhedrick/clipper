@@ -4,7 +4,7 @@
 
 ## The split: code guards the state, Claude does the reading, people make the decisions
 
-The platform is run by a **Claude operator**: a scheduled Claude Code session that follows the playbook in `.claude/skills/clipper-operator/`. It uses a small **`clipper` CLI** for every read and write of our own state, and the **OpusClip connector** (MCP) to submit videos and work with clips. Code is kept for work that must be exact, repeatable or safe. Claude handles work that means reading messy, human-written material and deciding what it means. People keep every decision that spends money in public, commits to a campaign, or publishes.
+The platform is run by a **Claude operator**: a Claude Code session that **a person starts on demand** (never on a schedule) and that follows the playbook in `.claude/skills/clipper-operator/`. It uses a small **`clipper` CLI** for every read and write of our own state, and the **OpusClip connector** (MCP) to submit videos and work with clips. Code is kept for work that must be exact, repeatable or safe. Claude handles work that means reading messy, human-written material and deciding what it means. People keep every decision that spends money in public, commits to a campaign, or publishes.
 
 | Concern | Owner | Why |
 |---|---|---|
@@ -29,7 +29,7 @@ This replaces the earlier plan, which put every step in code and added a separat
 
 ```mermaid
 flowchart LR
-  OP["Claude operator<br/>(Claude Code session, started by hand)"]
+  OP["Claude operator<br/>(Claude Code session you start: manual only)"]
   OP -->|follows playbook| CLI["clipper CLI"]
   OP -->|only with params from<br/>clipper source reserve| OCM["OpusClip connector (MCP)"]
   CLI --> DB[(Postgres)]
@@ -41,14 +41,14 @@ flowchart LR
   OP -->|report: what needs you| HUMAN
 ```
 
-- **Claude operator run**: a Claude Code session against this repo, started by hand (no scheduled Routine). It works through the playbook's loop: triage → collect finished clips → pre-screen → package approved clips → source footage → submit → onboard → scout. It ends with a short report. Because the OpusClip connector is only available inside a Claude session, the operator run also does the polling a cron job would otherwise do.
+- **Claude operator run**: a Claude Code session on this repo that you start ("do an operator run"). There is no scheduled Routine; that's a deliberate decision (2026-09-23). It works through the playbook's loop: triage → collect finished clips → pre-screen → package approved clips → source footage → submit → onboard → scout. It ends with a short report. Because the OpusClip connector is only available inside a Claude session, the operator run also does the polling a cron job would otherwise do.
 - **Review web app**: the one human-facing surface. Confirm campaign configs, approve/reject clips, record post URLs. Served by the existing Fastify app.
 
 In a cloud session, the CLI runs in **remote mode**: Claude's cloud sessions can only make HTTPS requests, so each `clipper` command is sent to the review app's `POST /operator/run` and runs there through the same code, as `claude-operator`, under a separate `OPERATOR_TOKEN` (see `DEPLOYMENT.md`). Locally, the CLI talks to Postgres directly.
 
-There is no background worker and no cron job. Manual operator runs are enough for this workflow: OpusClip takes minutes to hours per video, and review waits on a person anyway. Nothing advances between runs.
+There is no background worker, cron job or scheduled run: nothing happens unless you start a run or act on the review page. Because OpusClip takes minutes to hours per video, a run that submits footage usually can't collect its clips; a later run you start does.
 
-**Fallback:** Pro also includes the plain OpusClip API. If operator runs ever prove too slow or too costly just for polling, `clipper sync` can be added as a Render Cron Job that polls with `OPUSCLIP_API_KEY` and writes through the same CLI functions. Nothing else changes.
+**If you ever want automation:** Pro also includes the plain OpusClip API, so a `clipper sync` Render Cron Job could poll with `OPUSCLIP_API_KEY` and write through the same CLI functions, and a scheduled Claude Routine could run the playbook. Both are deliberately **not** part of v1.
 
 ## OpusClip via the connector: record first, then spend
 
@@ -185,7 +185,7 @@ Modules talk to each other through their exported functions, not each other's ta
 | Database | Postgres (Supabase free, via the Session pooler with TLS verified against Supabase's CA), Drizzle migrations | built |
 | Validation | zod | built |
 | CLI | plain `node` entry with a small arg parser (no framework needed) | to build |
-| Operator | Claude Code cloud session on this repo, started by hand, with the OpusClip connector attached and `CLIPPER_OPERATOR_TOKEN` in the environment | live |
+| Operator | A Claude Code session you start on this repo, with the OpusClip connector attached; in the cloud it reaches the DB via the review app (`CLIPPER_OPERATOR_TOKEN`) | manual only, no schedule |
 | OpusClip | OpusClip connector (MCP), Pro plan: 900 credits/month, 10 concurrent projects (checked 2026-09-22) | connected |
 | Storage | Cloudflare R2 via `@aws-sdk/client-s3` + `lib-storage` (streaming multipart) | built; bucket not created yet |
 
