@@ -2,7 +2,7 @@
 
 **Start here.** This page says where the project is going, how the whole process will work when it's done, and exactly where it stands today. It's the summary; the detail lives in the docs it links to.
 
-*Last updated: 2026-09-23 · tasks 0–13 built and deployed; live checks for 8, 9 and 12 pending · operator runs are **manual only***
+*Last updated: 2026-09-23 · tasks 0–13 built and deployed; Discord notifications live and verified; live checks for 8, 9 and 12 (R2 bucket) pending · operator runs are **manual only***
 
 ---
 
@@ -85,15 +85,15 @@ flowchart TD
 | 9 | Collect clips from OpusClip + objective checks (`candidate upsert`) | ✅ code · ⏳ live check (real clip field names) |
 | 10 | Caption validation + pre-screen + reviewer-requested edits | ✅ |
 | 11 | Review web page (confirm configs, approve clips, record posts) | ✅ |
-| 12 | Ready-to-Post packaging to R2 + notifications | ✅ code · ⏳ real bucket + webhook |
-| 13 | Deploy: Render web (free) + Supabase Postgres (free) + on-demand operator runs | ✅ review page **live**; operator remote mode **live and verified from a cloud session**; manual empty-queue run done 2026-09-23 (report: "Needs you: nothing"; posting it waits on the webhook, §7) |
+| 12 | Ready-to-Post packaging to R2 + notifications | ✅ code · notifications ✅ live · ⏳ real bucket |
+| 13 | Deploy: Render web (free) + Supabase Postgres (free) + on-demand operator runs | ✅ review page **live**; operator remote mode **live and verified from a cloud session**; Discord notifications **live and verified** 2026-09-23; manual empty-queue run done 2026-09-23 (report: "Needs you: nothing") |
 | 14 | End to end on a real campaign, twice (idempotency) | ⏳ |
 
 **Milestone A (Claude can read campaigns) is done.** Claude can scout, add, classify, read briefs, propose configs and choose footage, all through the CLI, with nothing spent.
 
 **Milestone B (clips get made) is built; its live check is pending.** Reserve → submit → collect → check → pre-screen → caption → reviewer-requested edits all work against fixtures. What's left is one real 10-credit run. It's no longer blocked on code: the review page (task 11) can now activate a campaign, so it waits on you joining the campaign and OK'ing the credits (§7).
 
-**Milestone C (review and packages) is built.** The review page (task 11), Ready-to-Post packaging and notifications (task 12) work end to end against a local S3-compatible server and a local webhook. They go live once you create the R2 bucket and the Slack/Discord webhook (§7).
+**Milestone C (review and packages) is built.** The review page (task 11) is live, and notifications (task 12) are live and verified with a real Discord webhook (§7). Ready-to-Post packaging still runs against a local S3-compatible server; it goes live once you create the R2 bucket (§7).
 
 ### Milestones
 
@@ -101,7 +101,7 @@ flowchart TD
 |---|---|---|---|
 | **A. Claude can read campaigns** | 3–7 | Scout → brief → config → footage | No · ✅ done |
 | **B. Clips get made** | 8–10 | Submit to OpusClip within budget, collect and pre-screen clips | OpusClip credits · built, live check pending |
-| **C. Review and packages** | 11–12 | Your review page, clip bundles, notifications | Storage (small) · built, needs your bucket + webhook |
+| **C. Review and packages** | 11–12 | Your review page, clip bundles, notifications | Storage (small) · notifications live; clip bundles need your R2 bucket |
 | **D. Live** | 13–14 | Hosted, run on demand, proven on a real campaign | $0 on free tiers (Render web + Supabase); ~$7/mo if the review page should never sleep |
 
 ### Verified against the real world
@@ -137,8 +137,9 @@ The **live database (Supabase) is empty** as of 2026-09-23: no campaigns, jobs o
 | When | What |
 |---|---|
 | Before the first real test | Join the Charlie Berens campaign on Content Rewards, then OK spending ~10 credits on a 10-minute slice |
-| Before the first real test | A Cloudflare R2 bucket for clip bundles, with a bucket-scoped API token (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`), and a Slack or Discord incoming-webhook URL (`NOTIFY_WEBHOOK_URL`), all set on Render. The code is ready for both. Until the webhook is set, `clipper attention notify` and `clipper notify` refuse, so run reports only appear in the Claude session. |
+| Before the first real test | A Cloudflare R2 bucket for clip bundles, with a bucket-scoped API token (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`), set on Render. The code is ready. |
 | ~~Before running the operator from a cloud session~~ | ✅ done 2026-09-23: `CLIPPER_OPERATOR_TOKEN` is in the Claude cloud environment (checked with a live `clipper attention list`). |
+| ~~A Slack or Discord incoming-webhook URL~~ | ✅ done 2026-09-23: a Discord webhook is set as `NOTIFY_WEBHOOK_URL` on Render (`clipper-review`), verified with a live `clipper notify` test message delivered to Discord. |
 | About once a week | Start any operator run, or open the review page, so the free Supabase database doesn't pause after ~7 idle days. If it does pause, restore it from the Supabase dashboard. |
 
 **Decided:** operator runs are **manual only**: no scheduled Routine (2026-09-23). Daily OpusClip budget **120 credits** (≈2 h of footage/day; set on Render as `OPUSCLIP_DAILY_CREDIT_BUDGET`, 2026-09-23). The month's 900 credits could go in ~7 days at that rate; the reserve step also refuses anything over OpusClip's remaining monthly credits.
