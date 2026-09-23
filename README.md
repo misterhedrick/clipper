@@ -414,7 +414,7 @@ Before starting a project:
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). In short:
 
 - **Code** (`clipper` CLI + Postgres): Content Rewards parsing, footage listing, the credit ledger that must approve every OpusClip submission (enforced by a hook), objective checks, caption validation, packaging to R2, notifications, the audit log.
-- **Claude operator** (Claude Code Routine following `.claude/skills/clipper-operator/`, with the OpusClip connector): scouting, brief reading, config drafting, footage selection, submitting to OpusClip and collecting clips, transcript-based pre-screen, caption drafting, reviewer-requested clip fixes, Needs Attention triage.
+- **Claude operator** (Claude Code session, started by hand, following `.claude/skills/clipper-operator/`, with the OpusClip connector): scouting, brief reading, config drafting, footage selection, submitting to OpusClip and collecting clips, transcript-based pre-screen, caption drafting, reviewer-requested clip fixes, Needs Attention triage.
 - **You** (review web app): join campaigns, confirm configs, approve clips, post, record results.
 
 ---
@@ -423,7 +423,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). In short:
 
 ### Phase 1 — Operator loop, ingestion and review
 
-The ordered task list is in [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md): the `clipper` CLI, brief reading, footage sources, OpusClip submit/sync with a credit budget, caption validation, the review web app, packaging, notifications, and the operator Routine.
+The ordered task list is in [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md): the `clipper` CLI, brief reading, footage sources, OpusClip submit/sync with a credit budget, caption validation, the review web app, packaging, notifications, and the operator deployment.
 
 Do not build automated social posting yet.
 

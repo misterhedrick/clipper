@@ -1,6 +1,6 @@
 ---
 name: clipper-operator
-description: Run the Content Rewards → OpusClip clipping pipeline as its operator. Use when asked to run the clipper, do an operator run, scout campaigns, onboard a campaign, find or select footage, submit sources, pre-screen clips, draft captions, or triage Needs Attention items. Also used by the scheduled operator Routine.
+description: Run the Content Rewards → OpusClip clipping pipeline as its operator. Use when asked to run the clipper, do an operator run, scout campaigns, onboard a campaign, find or select footage, submit sources, pre-screen clips, draft captions, or triage Needs Attention items.
 ---
 
 # Clipper operator playbook

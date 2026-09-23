@@ -1,6 +1,6 @@
 # Deployment (Render + Supabase + Cloudflare R2)
 
-The review web app runs on Render, the database is Supabase's free Postgres, and Ready-to-Post bundles go to Cloudflare R2. The Claude operator runs as a Claude Code Routine, not on Render (see below). There's no worker or cron: OpusClip is reached through the OpusClip connector, which only exists inside a Claude session, so the hourly operator run does the polling too.
+The review web app runs on Render, the database is Supabase's free Postgres, and Ready-to-Post bundles go to Cloudflare R2. The Claude operator runs in a Claude Code cloud session you start by hand, not on Render (see below). There's no worker, cron or scheduled Routine: OpusClip is reached through the OpusClip connector, which only exists inside a Claude session, so each operator run does the polling too.
 
 Revised 2026-09-23: the database moved from Render Postgres to Supabase to keep hosting free. `render.yaml` in the repo root matches what's described here.
 
@@ -9,7 +9,7 @@ Revised 2026-09-23: the database moved from Render Postgres to Supabase to keep 
 | Resource | Where | Plan | Notes |
 |---|---|---|---|
 | **Web service** `clipper-review` | Render, Virginia | free | The Fastify app: review pages + `/health`. Deploys `main` on every push. Free services sleep when idle, so the first page load after a quiet spell takes ~30–60 s. Switch to `starter` for always-on. |
-| **Postgres** | Supabase | free | 500 MB, plenty for this. **Free projects pause after ~7 days without activity**; the hourly operator run keeps it awake once it's scheduled. |
+| **Postgres** | Supabase | free | 500 MB, plenty for this. **Free projects pause after ~7 days without activity.** Runs are manual, so do one (or open the review page) at least weekly, or unpause it in the Supabase dashboard. |
 | **R2 bucket** | Cloudflare | free tier | Ready-to-Post bundles. Zero egress fees for the downloads that happen on every approved clip. |
 
 ## What's live (2026-09-23)
@@ -24,7 +24,7 @@ Revised 2026-09-23: the database moved from Render Postgres to Supabase to keep 
 1. **`DATABASE_URL` = the Session pooler string.** In Supabase: *Connect → Session pooler*. It looks like `postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres`. Don't use the "Direct connection": it's IPv6-only on the free plan, and Render can't make IPv6 connections. Session mode (port 5432) behaves like a normal connection, so `SELECT … FOR UPDATE` and the credit-budget advisory lock work as designed. Don't use the transaction pooler (port 6543).
 2. **`DATABASE_CA_CERT` = Supabase's root CA certificate**, pasted as the whole PEM text. Get it from *Project Settings → Database → SSL Configuration → Download certificate*. With it set, `src/db/client.ts` requires TLS and verifies the server against that CA; a wrong or missing CA fails the connection instead of silently connecting unverified. (`sslmode=no-verify` in the URL would also connect, but without checking who's on the other end: avoid it.)
 
-Both go in the Render service's environment, and in the operator Routine's environment.
+Both go in the Render service's environment.
 
 ## The web service
 
@@ -41,12 +41,12 @@ Reviewers sign in at the service's URL with their name and `REVIEWER_TOKEN` (at 
 
 ## The Claude operator
 
-A Claude Code Routine on this repository that runs the `clipper-operator` skill hourly and on demand.
+A Claude Code cloud session on this repository, started by hand ("do an operator run"), that runs the `clipper-operator` skill. There's no scheduled Routine (decided 2026-09-23); the environment below is what that session needs.
 
 **How it reaches the database.** Claude Code cloud sessions reach the internet only through an HTTPS egress proxy. Tested 2026-09-23: a Postgres connection to Supabase's pooler opens a tunnel but never completes (the standard handshake times out; Postgres 17's direct TLS is reset), and any Postgres host would behave the same. So the operator doesn't use `DATABASE_URL`. With `CLIPPER_OPERATOR_TOKEN` set, the `clipper` CLI (`src/cli/remote.ts`) sends each command to the review app's `POST /operator/run` (`src/web/operator.ts`), which runs it through the same `run()` against the database:
 
 - **Same rules.** The server always acts as `claude-operator`, so `transition()` and the review module refuse approvals, activations and posts exactly as they do locally, and there's still no approve command.
-- **Separate secret.** `OPERATOR_TOKEN` on the server = `CLIPPER_OPERATOR_TOKEN` in the Routine. It isn't `REVIEWER_TOKEN`: holding it lets you operate, never review. The endpoint only exists when `OPERATOR_TOKEN` is set.
+- **Separate secret.** `OPERATOR_TOKEN` on the server = `CLIPPER_OPERATOR_TOKEN` in the Claude cloud environment. It isn't `REVIEWER_TOKEN`: holding it lets you operate, never review. The endpoint only exists when `OPERATOR_TOKEN` is set.
 - **No server files.** File arguments (`--file`, `--ops-file`) are read by the client and sent as stdin. The server refuses a remote command that names a path.
 - **Sent once.** Only the wake-up health check is retried (the free service sleeps). A command that fails in transit is reported as "may or may not have run", never resent. `reserve` isn't idempotent, and the state machine plus crash-recovery protocol handle the rest.
 - **Fails closed.** The submit guard hook runs through the same path, and anything but an explicit allow blocks the submission.
@@ -56,12 +56,12 @@ A Claude Code Routine on this repository that runs the `clipper-operator` skill 
 
 Because commands now run on Render, **their configuration lives on Render too**: `OPUSCLIP_DAILY_CREDIT_BUDGET`, `NOTIFY_WEBHOOK_URL`, `REVIEW_URL` and the R2 key pair (with write access, for `clipper package`) go in the web service's environment.
 
-The Routine's environment needs:
+The Claude cloud environment needs:
 - **The OpusClip connector** attached (Pro plan; the org is fixed at connect time, so connect the right one).
 - **`CLIPPER_OPERATOR_TOKEN`** (the Render service's `OPERATOR_TOKEN`). That's the only setting: the app's URL is built in (`DEFAULT_REMOTE_URL`); set `CLIPPER_REMOTE_URL` only to point somewhere else. No database or R2 credentials.
 - **Network access** to the Render app, OpusClip, and (for the connector's own work) whatever it needs.
 - **Dependencies installed.** The SessionStart hook runs `npm ci` in a fresh checkout, so `npx clipper` works.
-- **This repo's `.claude/settings.json` in force.** It holds the submit guard hook and the denied posting/sharing tools. Check this in the Routine's environment before relying on it.
+- **This repo's `.claude/settings.json` in force.** It holds the submit guard hook and the denied posting/sharing tools. Check this in the cloud environment before relying on it.
 
 ## Migrations
 
@@ -69,7 +69,7 @@ Schema changes ship as Drizzle migrations and run when the web service starts. T
 
 ## Secrets
 
-Set every secret in the Render dashboard and the Routine's environment. Never in the repo: `render.yaml` marks them `sync: false`, and `.env` is gitignored. Scope the R2 key to the one bucket.
+Set every secret in the Render dashboard and the Claude cloud environment. Never in the repo: `render.yaml` marks them `sync: false`, and `.env` is gitignored. Scope the R2 key to the one bucket.
 
 ## Local development
 
