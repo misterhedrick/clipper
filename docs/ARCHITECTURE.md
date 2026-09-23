@@ -107,14 +107,14 @@ clipper footage skip <campaignId> --url <videoUrl> --reason "..." [...]        r
 clipper footage list <campaignId> [--decision selected|skipped]               (r) registered sources and every decision with its reason
 
 # Processing (OpusClip calls themselves go through the connector; see "record first, then spend")
-clipper source validate <sourceJobId>               checks: supported host, public reachability, campaign active → queued
+clipper source validate <sourceJobId>               checks: campaign confirmed + active, source publicly reachable (Drive: no sign-in redirect; YouTube: oEmbed) → queued
 clipper source reserve <sourceJobId> --opus-remaining <n> [--range a-b] [--estimated-minutes m]
                                                     budget + dedupe check, reserve credits → submitting; returns submitParams
 clipper source record-project <sourceJobId> --project-id <id>     → project_created
 clipper source record-failure <sourceJobId> --error "..."          classify, release reservation, set status
 clipper source list [--status s] [--campaign id]  (r)
 clipper credits                                 (r) budget used/remaining today, per campaign, and last reconciled OpusClip usage
-clipper credits reconcile --opus-used <n>           record OpusClip's reported monthly usage
+clipper credits reconcile --opus-used <n> --limit <n> --reset-at <iso>   record opusclip_get_usage's monthly figures
 clipper guard submit                                (hook) read a PreToolUse payload on stdin; exit 0 only if it matches an open reservation, else exit 2
 
 # Candidates

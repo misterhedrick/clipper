@@ -3,7 +3,7 @@
 Goal: turn selected footage into OpusClip projects without spending a credit outside the protocol. The database decides whether you may spend. The connector only carries out that decision.
 
 ## 1. Check headroom
-- `opusclip_get_usage`: note `monthly.remaining`. Then `clipper credits reconcile --opus-used <monthly.used>`.
+- `opusclip_get_usage`: note `monthly.remaining`. Then `clipper credits reconcile --opus-used <monthly.used> --limit <monthly.limit> --reset-at <monthly.reset_at>`.
 - `clipper credits`: today's budget left, per campaign. If either is near zero, stop and report.
 
 ## 2. For each job, in priority order

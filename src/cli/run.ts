@@ -9,6 +9,8 @@ import { InvalidConfigError } from "../modules/campaign-config/index.js";
 import { campaignCommands } from "./commands/campaign.js";
 import { guardCommands } from "./commands/guard.js";
 import { footageCommands } from "./commands/footage.js";
+import { creditsCommands, sourceCommands } from "./commands/source.js";
+import { SubmissionError } from "../modules/submissions/index.js";
 import { FootageError } from "../modules/footage-sources/index.js";
 import { SourcingError } from "../modules/sourcing/index.js";
 
@@ -26,6 +28,7 @@ export type CommandContext = {
   positionals: string[];
   options: Record<string, string | boolean | undefined>;
   stdin: () => Promise<string>;
+  env: NodeJS.ProcessEnv;
 };
 
 export type Command = {
@@ -40,6 +43,8 @@ export type Command = {
 const groups: Record<string, Record<string, Command>> = {
   campaign: campaignCommands,
   footage: footageCommands,
+  source: sourceCommands,
+  credits: creditsCommands,
   guard: guardCommands,
 };
 
@@ -57,7 +62,9 @@ function help(): unknown {
     usage: "clipper <group> <command> [args] [--options]",
     commands: Object.fromEntries(
       Object.entries(groups).flatMap(([g, cmds]) =>
-        Object.entries(cmds).map(([name, c]) => [`${g} ${name}`, { usage: c.usage, summary: c.summary }]),
+        Object.entries(cmds)
+          .filter(([name]) => name !== "")
+          .map(([name, c]) => [`${g} ${name}`, { usage: c.usage, summary: c.summary }]),
       ),
     ),
   };
@@ -68,9 +75,13 @@ function errorResult(code: string, message: string, exitCode = 1): RunResult {
 }
 
 export async function run(argv: string[], deps: RunDeps = {}): Promise<RunResult> {
-  const [group, name, ...rest] = argv;
+  const [group, maybeName, ...more] = argv;
   if (!group || group === "help" || group === "--help") return { exitCode: 0, output: help() };
-  const command = groups[group]?.[name ?? ""];
+  // A group may have a default command (e.g. `clipper credits`); options can follow it directly.
+  const useDefault = maybeName === undefined || maybeName.startsWith("--");
+  const name = useDefault ? "" : maybeName;
+  const rest = useDefault && maybeName !== undefined ? [maybeName, ...more] : more;
+  const command = groups[group]?.[name];
   if (!command) return errorResult("usage", `Unknown command: ${[group, name].filter(Boolean).join(" ")}. Run \`clipper help\`.`);
 
   let parsed: ReturnType<typeof parseArgs>;
@@ -97,6 +108,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<RunResult
     positionals: parsed.positionals,
     options: parsed.values as CommandContext["options"],
     stdin: deps.stdin ?? readStdin,
+    env: deps.env ?? process.env,
   };
 
   try {
@@ -114,7 +126,8 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<RunResult
       err instanceof CampaignConnectorError ||
       err instanceof BriefReaderError ||
       err instanceof FootageError ||
-      err instanceof SourcingError
+      err instanceof SourcingError ||
+      err instanceof SubmissionError
     ) {
       return errorResult(err.code, err.message);
     }

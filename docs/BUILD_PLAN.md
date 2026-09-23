@@ -53,7 +53,7 @@ Content Rewards URL → metadata + reference materials. Live canary test: `RUN_N
 
 **Milestone A (tasks 3–7) is complete:** Claude can scout, add, classify, read briefs, propose configs, and choose footage, all through the CLI, with nothing spent.
 
-## 8. Credit ledger + submit protocol + guard hook
+## 8. Credit ledger + submit protocol + guard hook ✅ code done · live check pending
 - `source validate` (host supported, publicly reachable, campaign active → `queued`), `source reserve`, `source record-project`, `source record-failure`, `credits`, `credits reconcile` per `ARCHITECTURE.md`.
 - `reserve` is one transaction: dedupe (job `queued`, no project, no open reservation) + daily/per-campaign budget + `--opus-remaining` → reservation row, job → `submitting`, `submit_params` stored and returned. Default estimate 90 min when duration is unknown.
 - `record-failure` classifies connector errors: rate limit, timeout or Drive quota → retryable (job back to `queued`, `retry_count`+1, max 3 → `needs_attention`); unsupported URL, private source or no credits → permanent (`submit_failed`). The reservation is released either way.
@@ -63,6 +63,7 @@ Content Rewards URL → metadata + reference materials. Live canary test: `RUN_N
   - Hook: a payload with a changed `videoUrl`, a missing title, or no reservation exits 2; an exact match exits 0.
   - Live: one real submission of a **10-minute range** (`--range 0-600`) goes reserve → connector → record-project, and `opusclip_get_usage` rises by roughly 10.
 - **Port:** the error classification from `src/lib/opusclip.ts` and `src/modules/project-creator/validateSource.ts` in commit `c55ad2e`.
+- **Outcome:** unit and hook checks pass, including an end-to-end run of the real hook script (exact match → exit 0, tampered `videoUrl` → exit 2). Also covered: budget lock under concurrency (3 parallel reserves, budget for 2 → exactly 2 pass), per-campaign cap, retries (3 transient → `needs_attention`), and a closed reservation blocking a second submit of the same video. Reachability: Drive = no sign-in redirect, YouTube = oEmbed, S3 = HEAD. **Pending:** the live 10-minute submission. It needs an `active` campaign, which only a reviewer can create (task 11), plus your go-ahead to spend ~10 credits.
 
 ## 9. Collecting clips: `candidate upsert` + objective checks
 - The operator calls `opusclip_list_clips` for each `project_created`/`processing` job and passes the JSON to `clipper candidate upsert <jobId> --file`. The CLI validates it with zod, dedupes by OpusClip clip ID, stores score/title/description/hashtags/duration/preview URL, runs objective checks, and moves new candidates to `awaiting_review`. If the project `stage` is still in progress, the job becomes `processing` with no candidates.

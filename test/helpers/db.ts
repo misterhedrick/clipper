@@ -24,6 +24,6 @@ export async function resetTestDatabase(url: string): Promise<void> {
 
 export async function truncateAll(db: Db): Promise<void> {
   await db.execute(
-    sql`truncate posts, credit_ledger, opus_usage_snapshots, candidate_clips, source_jobs, footage_sources, status_events, campaigns restart identity cascade`,
+    sql`truncate posts, audit_log, credit_ledger, opus_usage_snapshots, candidate_clips, source_jobs, footage_sources, status_events, campaigns restart identity cascade`,
   );
 }
