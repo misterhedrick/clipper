@@ -113,6 +113,14 @@ Manual-posting tracking (README § "Post manually in version one").
 | `earnings` | numeric | |
 | `notes` | text | |
 
+## Status changes: `transition()`
+
+`src/db/transition.ts` is the only code that writes a `status` column. A static test fails the build if any other file does. Each call:
+- locks the row (`SELECT … FOR UPDATE`), so concurrent transitions serialize;
+- checks the change is in that entity's allowed-transition table (e.g. a source job can't jump from `detected` to `completed`);
+- refuses **human-only** targets unless the actor is `reviewer:<identity>`: campaign → `active`; candidate → `approved`, `needs_edit`, `rejected`, `posted`. The operator (`claude-operator`) and `system` can never make these moves, whatever calls them;
+- updates the row (and `status_reason` where the table has it) and inserts the `status_events` row in one transaction.
+
 ## Constraints enforced in the database
 
 - Every `status` column (and `status_events.entity_type`, `posts.platform`) has a `CHECK` constraint limiting it to the values listed above, so a typo in application code fails loudly.
@@ -128,7 +136,9 @@ The schema source of truth is `src/db/schema.ts` (Drizzle); migrations in `src/d
 - `campaigns (status)` — the enumerator polls only `active` campaigns.
 - `status_events (entity_type, entity_id)` — audit lookups per entity.
 
-## v2 changes (BUILD_PLAN task 3, not yet migrated)
+## v2 changes (BUILD_PLAN task 3, migrated in `0001_drop_drive_columns` + `0002_schema_v2`)
+
+Two migrations rather than one: drizzle-kit prompts interactively when a table both loses and gains columns in one step. The v2 migration adds `NOT NULL` columns to `source_jobs` without defaults. That's safe only because no deployed database holds rows yet; after the first real deploy, schema changes must include backfills.
 
 These come from the Claude-operator design (`ARCHITECTURE.md`) and the finding that footage comes from many hosts, not just Drive (`CAMPAIGN_SURVEY.md`).
 
@@ -162,7 +172,7 @@ Unique: `(campaign_id, url)`.
 
 - Replace `drive_file_id` with `source_key text not null` (e.g. `gdrive:{fileId}`, `youtube:{videoId}`; see `ARCHITECTURE.md` § "Footage source kinds") and `source_kind text not null`.
 - Add `footage_source_id uuid` fk (nullable: a file can be selected directly).
-- Add `decision text not null`: `selected \| skipped`, with `decision_reason text not null` and `decided_by text not null`. Skipped files get a row too, so later runs don't re-evaluate them. Only `selected` rows move past `detected`.
+- Add `decision text not null`: `selected \| skipped`, with `decision_reason text not null` and `decided_by text not null`. Skipped files get a row too, so later runs don't re-evaluate them. A skipped row sits in the terminal status **`skipped`** (added to the status vocabulary). A CHECK ties `decision = 'skipped'` to `status = 'skipped'` both ways.
 - Rename `drive_file_name` → `source_name`. Add `source_path` (folder path within the source).
 - Add `submit_params jsonb`: the exact parameters `clipper source reserve` issued for the connector call. The submit guard hook compares the real call against this.
 - Add `opusclip_stage text`: last project stage seen via `opusclip_list_clips`.
@@ -196,14 +206,14 @@ One row per credit reservation made by `clipper source reserve`.
 | `reserved_at` | timestamptz not null | Daily budget sums `open` + `consumed` rows reserved today (UTC) |
 | `closed_at` | timestamptz | |
 
-Partial unique index on `(source_job_id) where status = 'open'`: at most one open reservation per job. The budget check and insert run in one transaction with `SELECT … FOR UPDATE` on a per-day budget row, so two concurrent reservations can't both pass.
+Partial unique index on `(source_job_id) where status = 'open'`: at most one open reservation per job. The budget check and insert run in one transaction holding a transaction-scoped advisory lock (`pg_advisory_xact_lock`) on the budget, so two concurrent reservations can't both pass. That's task 8.
 
 ### `opus_usage_snapshots` (new)
 
 | Column | Type | Notes |
 |---|---|---|
 | `used` | int not null | `monthly.used` from `opusclip_get_usage` |
-| `limit` | int not null | `monthly.limit` (900 on Pro as of 2026-09-22) |
+| `monthly_limit` | int not null | `monthly.limit` (900 on Pro as of 2026-09-22). Not `limit`, which is a reserved word |
 | `reset_at` | timestamptz not null | |
 | `recorded_by` | text not null | |
 

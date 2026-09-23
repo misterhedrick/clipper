@@ -17,11 +17,12 @@ Drizzle schema + migrations for `campaigns`, `source_jobs`, `candidate_clips`, `
 ## 2. `campaign-connector` ✅ done
 Content Rewards URL → metadata + reference materials. Live canary test: `RUN_NETWORK_TESTS=1 npm test -- live`.
 
-## 3. Schema v2 + config cleanup
+## 3. Schema v2 + config cleanup ✅ done
 - Migration per `DATA_MODEL.md` § "v2 changes": `campaigns.campaign_type`, `footage_sources` table, `source_jobs.source_key`/`source_kind` (replacing `drive_file_id`), candidate `prescreen_*` and `caption` columns, `credit_ledger`.
 - Drop `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` and `OPUSCLIP_API_KEY` from required config (the app makes no LLM or OpusClip calls, and Drive listing is keyless). Add `OPUSCLIP_DAILY_CREDIT_BUDGET` and `REVIEWER_TOKEN`. R2 and notifier vars become required only by the commands that use them, not at boot of every entry point.
 - A single `transition()` helper per entity: updates status and inserts `status_events` in one transaction. Nothing else writes a `status` column.
 - **Done when:** migrations apply on top of v1. The duplicate `(campaign_id, source_key)` test passes. A test proves `transition()` writes the audit row atomically: a forced failure after the update leaves neither the update nor the event.
+- **Outcome:** migrations `0001`/`0002` apply in order on an empty DB; `transition()` also enforces allowed transitions and **human-only** moves (campaign → `active`, clip approve/edit/reject/posted need a `reviewer:` actor); a static test blocks status writes outside `transition()`. Config now loads per section (`db`, `server`, `credits`, `r2`, `notify`).
 
 ## 4. CLI skeleton + campaign commands
 - `clipper` bin: JSON on stdout, `{error:{code,message}}` + non-zero exit on failure, `actor = 'claude-operator'` on every write.

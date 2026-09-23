@@ -72,7 +72,7 @@ The connector can spend credits the moment Claude calls `opusclip_submit_project
 
 The playbook tells Claude what to do. These invariants make sure a mistake in following it can't cause harm:
 
-1. **No approval path in the CLI.** Candidates reach `approved` only through the web app's authenticated endpoint. Nothing Claude can run changes that.
+1. **No approval path for automation.** Candidates reach `approved` (and `needs_edit`, `rejected`, `posted`) and campaigns reach `active` only with a `reviewer:<identity>` actor. `transition()` refuses those moves for any other actor, and only the web app's authenticated endpoints act as a reviewer. The CLI also simply has no such command.
 2. **`autoApprove` is rejected** by config validation if it is ever anything but `false`.
 3. **Campaigns reach `active` only through human confirmation** in the web app. `clipper campaign propose-config` writes a draft (`pending_confirmation`) and cannot activate.
 4. **Credit budget.** `clipper source reserve` refuses anything over `OPUSCLIP_DAILY_CREDIT_BUDGET`, the per-campaign cap, or OpusClip's own remaining monthly credits. The check and reservation are one DB transaction. (OpusClip reports its monthly cap as not enforced, so ours is the one that holds.)
