@@ -1,9 +1,8 @@
-import { loadConfig } from "../../config.js";
+import { DEFAULT_APP_URL, loadConfig } from "../../config.js";
 import { listAttention, notifyAttention } from "../../modules/attention/index.js";
 import { MAX_MESSAGE_CHARS, sendNotification, truncate } from "../../modules/notifier/index.js";
 import { packageCandidate } from "../../modules/packaging/index.js";
 import { r2Store } from "../../modules/packaging/r2.js";
-import { DEFAULT_REMOTE_URL } from "../remote.js";
 import { positional, requiredOption, type Command, type CommandContext } from "../run.js";
 
 const notifier = (ctx: CommandContext) => {
@@ -11,7 +10,7 @@ const notifier = (ctx: CommandContext) => {
   return {
     send: (message: string) => sendNotification({ webhookUrl: NOTIFY_WEBHOOK_URL, fetch: ctx.connector.fetch }, message),
     // Every notification links the review page, so a person can act from their phone.
-    reviewUrl: REVIEW_URL ?? DEFAULT_REMOTE_URL,
+    reviewUrl: REVIEW_URL ?? DEFAULT_APP_URL,
   };
 };
 

@@ -45,6 +45,9 @@ export type ConfigSection = keyof Sections;
 type UnionToIntersection<U> = (U extends unknown ? (x: U) => void : never) extends (x: infer I) => void ? I : never;
 export type Config<K extends ConfigSection> = UnionToIntersection<z.infer<Sections[K]>>;
 
+/** The deployed review app. Not a secret: the CLI's default remote and the link in notifications. */
+export const DEFAULT_APP_URL = "https://clipper-review.onrender.com";
+
 export class ConfigError extends Error {
   constructor(public readonly issues: string[]) {
     super(`Invalid configuration:\n  ${issues.join("\n  ")}`);
