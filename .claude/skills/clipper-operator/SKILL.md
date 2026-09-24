@@ -46,10 +46,12 @@ First run `clipper attention notify`. It sends one digest of anything newly need
 
 ```
 Operator run — <date>
-Needs you: <decisions waiting on a person, each with a link/ID, or "nothing">
+Needs you: <decisions waiting on a person, each with a link/ID and your recommendation, or "nothing">
 Did: <counts: sources selected, jobs submitted, candidates pre-screened, items triaged>
 Credits: <used today> / <daily budget> · OpusClip month: <used> / <limit>
 Flagged: <new needs_attention items, one line each>
 ```
 
 "Needs you" goes first and is the only part that matters if there's nothing else to say. If a person has to do nothing, say so plainly.
+
+**Every decision you hand a person comes with a recommendation.** For each open question (an unresolved config field, a flag, a footage choice, a clip to approve), say what you'd pick and why, based on what usually performs best for that kind of campaign and platform (e.g. "captions on: burned-in captions lift watch time on TikTok/Reels"), so they can accept it in one tap. Put the same recommendations in the config's `extraction.unexpressedRules` or the flag reason. A recommendation is advice: never apply it yourself where the rules above reserve the decision for a person. `clipper notify` appends the review page link to every message, so don't paste it yourself.

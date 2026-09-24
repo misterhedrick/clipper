@@ -119,12 +119,12 @@ flowchart TD
 | MW4 (Call of Duty) | `pending_confirmation` | Real caption rules drafted. **Footage is on MediaSilo, which OpusClip can't read**, and the campaign is paused on Content Rewards. |
 | Charlie Berens | `discovered`, classified long-form | Drive folder registered; one full special selected. **Best first real test.** |
 
-The **live database (Supabase) is empty** as of 2026-09-23: no campaigns, jobs or candidates. The rows above are local only, so the first real test starts by re-adding Charlie Berens in an operator run.
+The **live database (Supabase)** holds one campaign as of 2026-09-24: **Charlie Berens**, re-added and onboarded by an operator run on 2026-09-23 and now `pending_confirmation` (no footage sources, jobs or candidates yet). You've joined it on Content Rewards and OK'd the ~10-credit first test; it waits on you confirming the config on the review page.
 
 ## 6. What's next
 
 1. **First real test (closes out tasks 8, 9 and 12), once you've done the §7 items.**
-   1. You start an operator run; it adds Charlie Berens to the live database and onboards it: read the brief, `propose-config` → `pending_confirmation`.
+   1. ✅ An operator run added Charlie Berens to the live database and onboarded it (2026-09-23) → `pending_confirmation`.
    2. You confirm the config on the review page (`npm run dev:api`).
    3. You start another run; it does a 10-minute slice (~10 credits): reserve → submit. A later run you start collects the clips (`candidate upsert`), pre-screens them and drafts captions.
    4. You approve a clip. The next run you start exports it and runs `clipper package`, and you get the bundle link.
@@ -136,13 +136,14 @@ The **live database (Supabase) is empty** as of 2026-09-23: no campaigns, jobs o
 
 | When | What |
 |---|---|
-| Before the first real test | Join the Charlie Berens campaign on Content Rewards, then OK spending ~10 credits on a 10-minute slice |
+| ~~Before the first real test~~ | ✅ done 2026-09-24: joined the Charlie Berens campaign and OK'd ~10 credits for a 10-minute slice |
+| Now | Confirm the Charlie Berens config on the review page (recommended: original audio only **on**, captions **on**, 15–60s, no `#Ad` line unless Content Rewards asks) |
 | ~~Before the first real test~~ | ✅ done 2026-09-23: a Cloudflare R2 bucket (`clipper-bundles`) with a bucket-scoped Account API token is set on Render (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`), verified with a live put/signed-URL/delete test. |
 | ~~Before running the operator from a cloud session~~ | ✅ done 2026-09-23: `CLIPPER_OPERATOR_TOKEN` is in the Claude cloud environment (checked with a live `clipper attention list`). |
 | ~~A Slack or Discord incoming-webhook URL~~ | ✅ done 2026-09-23: a Discord webhook is set as `NOTIFY_WEBHOOK_URL` on Render (`clipper-review`), verified with a live `clipper notify` test message delivered to Discord. |
 | About once a week | Start any operator run, or open the review page, so the free Supabase database doesn't pause after ~7 idle days. If it does pause, restore it from the Supabase dashboard. |
 
-**Decided:** operator runs are **manual only**: no scheduled Routine (2026-09-23). Daily OpusClip budget **120 credits** (≈2 h of footage/day; set on Render as `OPUSCLIP_DAILY_CREDIT_BUDGET`, 2026-09-23). The month's 900 credits could go in ~7 days at that rate; the reserve step also refuses anything over OpusClip's remaining monthly credits.
+**Decided:** every decision handed to you comes with Claude's recommendation (what usually performs best), and every notification links the review page (2026-09-24). Operator runs are **manual only**: no scheduled Routine (2026-09-23). Daily OpusClip budget **120 credits** (≈2 h of footage/day; set on Render as `OPUSCLIP_DAILY_CREDIT_BUDGET`, 2026-09-23). The month's 900 credits could go in ~7 days at that rate; the reserve step also refuses anything over OpusClip's remaining monthly credits.
 
 ## 8. Known limits (v1)
 

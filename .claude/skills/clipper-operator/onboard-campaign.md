@@ -10,7 +10,7 @@ Goal: turn a freeform brief into a validated campaign config for a person to con
 
 ## 2. Draft the config
 
-Write `config.json` matching the `CampaignConfig` schema (`docs/DATA_MODEL.md`). The CLI validates it. Guidance per field:
+Write `config.json` matching the `CampaignConfig` schema (`docs/DATA_MODEL.md`). The CLI validates it. When the brief is silent on a field, fill it with what usually performs best for that content and platform (not a placeholder), mark it **low** confidence, and say in `unexpressedRules` what you picked and why, so the person can confirm your recommendation rather than decide from scratch. Guidance per field:
 
 | Field | Where it usually is | Notes |
 |---|---|---|

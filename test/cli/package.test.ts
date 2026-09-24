@@ -205,7 +205,12 @@ describe.skipIf(!TEST_DATABASE_URL)("packaging and notifications", () => {
 
     it("clipper notify sends the operator's report", async () => {
       expect(await out("notify", "--message", "Operator run — Needs you: nothing")).toMatchObject({ delivered: true });
-      expect(delivered).toEqual([{ text: "Operator run — Needs you: nothing" }]);
+      expect(delivered).toEqual([{ text: "Operator run — Needs you: nothing\nReview: https://review.example" }]);
+    });
+
+    it("clipper notify doesn't repeat a review link the message already has", async () => {
+      await out("notify", "--message", "Confirm at https://review.example");
+      expect(delivered).toEqual([{ text: "Confirm at https://review.example" }]);
     });
   });
 });
