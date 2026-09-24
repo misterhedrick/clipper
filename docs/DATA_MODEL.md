@@ -66,6 +66,7 @@ type CampaignConfig = {
 | `source_url` | text not null | The public Drive file URL handed to OpusClip. |
 | `status` | text not null | `detected \| validating \| validation_failed \| queued \| submitting \| submit_failed \| project_created \| processing \| candidates_ready \| needs_attention \| completed` |
 | `status_reason` | text | Human-readable reason for the current status, required when status is a `_failed` or `needs_attention` state. |
+| `opusclip_upload_id` | text | Drive videos only: the `upload_id` from OpusClip's upload link once `source upload` has copied the file in. Submitted as `videoUrl` in place of the Drive link; cleared when a failed job is re-validated. |
 | `opusclip_project_id` | text | Set as soon as OpusClip confirms creation — before any further processing, so a crash can't orphan a created project untracked. |
 | `retry_count` | int not null default 0 | |
 

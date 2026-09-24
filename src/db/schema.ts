@@ -188,6 +188,9 @@ export const sourceJobs = pgTable(
     status: text("status").$type<SourceJobStatus>().notNull(),
     statusReason: text("status_reason"),
     submitParams: jsonb("submit_params").$type<Record<string, unknown>>(),
+    // Set once the video is uploaded to OpusClip's storage (`source upload`), for
+    // hosts OpusClip won't fetch itself (Google Drive); submitted in place of sourceUrl.
+    opusclipUploadId: text("opusclip_upload_id"),
     opusclipProjectId: text("opusclip_project_id"),
     opusclipStage: text("opusclip_stage"),
     retryCount: integer("retry_count").notNull().default(0),

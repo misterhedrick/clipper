@@ -3,7 +3,7 @@ import { loadConfig } from "../../config.js";
 import { campaigns, sourceJobs, SOURCE_JOB_STATUSES, type SourceJobStatus } from "../../db/schema.js";
 import { resolveCampaign } from "../../modules/campaigns/index.js";
 import { creditsSummary, reconcileUsage } from "../../modules/credits/index.js";
-import { recordFailure, recordProject, reserve, validateSource } from "../../modules/submissions/index.js";
+import { recordFailure, recordProject, reserve, uploadSource, validateSource } from "../../modules/submissions/index.js";
 import { positional, requiredOption, UsageError, type Command, type CommandContext } from "../run.js";
 
 const submitCtx = (ctx: CommandContext, withBudget = false) => ({
@@ -69,6 +69,17 @@ export const sourceCommands: Record<string, Command> = {
     summary: "Check a selected video can be submitted (campaign confirmed + active, source publicly reachable) → queued.",
     usage: "<sourceJobId>",
     run: (ctx) => validateSource(submitCtx(ctx), positional(ctx, 0, "sourceJobId")),
+  },
+  upload: {
+    summary:
+      "Copy a queued Google Drive job's video into OpusClip's storage (OpusClip won't fetch Drive links). Pass upload_url and upload_id from opusclip_create_upload_link; reserve then submits the upload ID. Takes a few minutes per GB.",
+    usage: "<sourceJobId> --upload-url <upload_url> --upload-id <upload_id>",
+    options: { "upload-url": { type: "string" }, "upload-id": { type: "string" } },
+    run: (ctx) =>
+      uploadSource(submitCtx(ctx), positional(ctx, 0, "sourceJobId"), {
+        uploadUrl: requiredOption(ctx, "upload-url"),
+        uploadId: requiredOption(ctx, "upload-id"),
+      }),
   },
   reserve: {
     summary:

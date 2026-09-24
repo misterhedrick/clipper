@@ -81,7 +81,7 @@ flowchart TD
 | 5 | Brief reader (`campaign brief`, links kept inline) | ✅ |
 | 6 | Campaign config schema + `propose-config` | ✅ |
 | 7 | Footage sourcing (Drive folders, YouTube channels, select/skip) | ✅ |
-| 8 | Credit ledger + submit protocol + guard hook | ✅ code · ⏳ live 10-credit test |
+| 8 | Credit ledger + submit protocol + guard hook | ✅ code · Drive upload step added 2026-09-24 (OpusClip refuses Drive links) · ⏳ live 10-credit test |
 | 9 | Collect clips from OpusClip + objective checks (`candidate upsert`) | ✅ code · ⏳ live check (real clip field names) |
 | 10 | Caption validation + pre-screen + reviewer-requested edits | ✅ |
 | 11 | Review web page (confirm configs, approve clips, record posts) | ✅ |
@@ -119,14 +119,14 @@ flowchart TD
 | MW4 (Call of Duty) | `pending_confirmation` | Real caption rules drafted. **Footage is on MediaSilo, which OpusClip can't read**, and the campaign is paused on Content Rewards. |
 | Charlie Berens | `discovered`, classified long-form | Drive folder registered; one full special selected. **Best first real test.** |
 
-The **live database (Supabase)** holds one campaign as of 2026-09-24: **Charlie Berens**, re-added and onboarded by an operator run on 2026-09-23 and now `pending_confirmation` (no footage sources, jobs or candidates yet). You've joined it on Content Rewards and OK'd the ~10-credit first test; it waits on you confirming the config on the review page.
+The **live database (Supabase)** holds one campaign as of 2026-09-24: **Charlie Berens**, `active` (config confirmed by `reviewer:Daniel`). Its Drive folder is registered and both full specials are selected. The first 10-minute submission of *Neighborly* was **rejected by OpusClip: it doesn't accept Google Drive links**, so no credits were spent; that job (`547c34b5`) is `submit_failed` and gets re-queued once the Drive upload step is live.
 
 ## 6. What's next
 
 1. **First real test (closes out tasks 8, 9 and 12), once you've done the §7 items.**
    1. ✅ An operator run added Charlie Berens to the live database and onboarded it (2026-09-23) → `pending_confirmation`.
-   2. You confirm the config on the review page (`npm run dev:api`).
-   3. You start another run; it does a 10-minute slice (~10 credits): reserve → submit. A later run you start collects the clips (`candidate upsert`), pre-screens them and drafts captions.
+   2. ✅ Config confirmed on the review page (2026-09-24). You can now edit a live campaign's config there too: turn on `captionsEnabled` and `originalAudioOnly` (recommended) before the retry.
+   3. You start another run; it re-queues the *Neighborly* job, uploads it to OpusClip (`source upload`, ~500 MB), and submits a 10-minute slice (~10 credits). A later run you start collects the clips (`candidate upsert`), pre-screens them and drafts captions.
    4. You approve a clip. The next run you start exports it and runs `clipper package`, and you get the bundle link.
 
    On the first upsert, check the real `opusclip_list_clips` field names and stage values against the parser (`src/modules/candidates/opusclip.ts`), and narrow it to what OpusClip actually sends.
@@ -150,6 +150,7 @@ The **live database (Supabase)** holds one campaign as of 2026-09-24: **Charlie 
 - **OpusClip can't ingest** Kick, MediaSilo, Notion pages or custom portals. Those campaigns need a person to supply footage, or get skipped.
 - **Dropbox folders can't be listed** (the page renders in the browser). A person pastes direct file links.
 - **YouTube channels** show only the 15 most recent uploads (feed limit).
+- **Drive videos are copied into OpusClip** (`source upload`), because OpusClip refuses Drive links. It runs on the Render web service: a ~500 MB special takes a few minutes, and every upload counts against Render's free outbound bandwidth (100 GB/month).
 - **Video length is unknown** before submitting, so credits are held at a 90-minute estimate unless a range or length is given. `credits reconcile` corrects the ledger from OpusClip's real usage.
 - **No automated posting.** It's out of scope for v1 by design.
 - **Clip field names not yet seen live.** No OpusClip project existed when `candidate upsert` was built, so its parser accepts several spellings of each field. The first real run confirms which one OpusClip uses.

@@ -13,7 +13,7 @@ import { guardCommands } from "./commands/guard.js";
 import { footageCommands } from "./commands/footage.js";
 import { creditsCommands, sourceCommands } from "./commands/source.js";
 import { attentionCommands, notifyCommands, packageCommands } from "./commands/ops.js";
-import { SubmissionError } from "../modules/submissions/index.js";
+import { SubmissionError, UploadError } from "../modules/submissions/index.js";
 import { CandidatesError } from "../modules/candidates/index.js";
 import { PackagingError, type BundleStore } from "../modules/packaging/index.js";
 import { NotifyError } from "../modules/notifier/index.js";
@@ -152,6 +152,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<RunResult
       err instanceof FootageError ||
       err instanceof SourcingError ||
       err instanceof SubmissionError ||
+      err instanceof UploadError ||
       err instanceof PackagingError ||
       err instanceof NotifyError
     ) {

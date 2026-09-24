@@ -4,7 +4,7 @@ import { buildApp } from "../../src/app.js";
 import { createDb, type Db } from "../../src/db/client.js";
 import { auditLog, campaigns, candidateClips, posts, sourceJobs, statusEvents } from "../../src/db/schema.js";
 import { transition } from "../../src/db/transition.js";
-import { confirmCampaign, decideCandidate } from "../../src/modules/review/index.js";
+import { confirmCampaign, decideCandidate, editCampaignConfig } from "../../src/modules/review/index.js";
 import { createSession } from "../../src/web/auth.js";
 import { r2Store } from "../../src/modules/packaging/r2.js";
 import { resetTestDatabase, TEST_DATABASE_URL, truncateAll } from "../helpers/db.js";
@@ -198,6 +198,29 @@ describe.skipIf(!TEST_DATABASE_URL)("review web app", () => {
 
     it("can't be done by the operator, even calling the module directly", async () => {
       await expect(confirmCampaign({ db, actor: "claude-operator" }, campaignId, validConfig())).rejects.toMatchObject({ code: "human_only" });
+    });
+
+    it("lets a reviewer edit a live campaign's config, audited, without changing its status", async () => {
+      const { cookie } = await login("alex");
+      const active = (await db.select().from(campaigns).where(eq(campaigns.contentRewardsCampaignId, "cr-active")))[0]!;
+      await db.update(campaigns).set({ config: validConfig() as never, configConfirmedBy: "reviewer:sam" }).where(eq(campaigns.id, active.id));
+      const page = await app.inject({ method: "GET", url: `/campaigns/${active.id}`, headers: { cookie } });
+      expect(page.body).toContain(`action="/campaigns/${active.id}/edit-config"`);
+
+      const cfg = validConfig();
+      cfg.clipGeneration.captionsEnabled = !cfg.clipGeneration.captionsEnabled;
+      expect(flash(await post(`/campaigns/${active.id}/edit-config`, { config: JSON.stringify(cfg) }, cookie)).error).toMatch(/Tick the box/);
+      const bad = { ...cfg, review: { ...cfg.review, autoApprove: true } };
+      expect(flash(await post(`/campaigns/${active.id}/edit-config`, { checked: "yes", config: JSON.stringify(bad) }, cookie)).error).toMatch(/autoApprove must be false/);
+
+      expect(flash(await post(`/campaigns/${active.id}/edit-config`, { checked: "yes", config: JSON.stringify(cfg) }, cookie)).ok).toMatch(/Config saved/);
+      const after = (await db.select().from(campaigns).where(eq(campaigns.id, active.id)))[0]!;
+      expect(after).toMatchObject({ status: "active", configConfirmedBy: "reviewer:alex", config: { clipGeneration: { captionsEnabled: cfg.clipGeneration.captionsEnabled } } });
+      expect(await db.select().from(auditLog).where(eq(auditLog.action, "edit_config"))).toEqual([expect.objectContaining({ actor: "reviewer:alex", entityId: active.id })]);
+
+      // Not for drafts (those are confirmed), and never by the operator.
+      expect(flash(await post(`/campaigns/${campaignId}/edit-config`, { checked: "yes", config: JSON.stringify(cfg) }, cookie)).error).toMatch(/only an active or paused/);
+      await expect(editCampaignConfig({ db, actor: "claude-operator" }, active.id, cfg)).rejects.toMatchObject({ code: "human_only" });
     });
   });
 

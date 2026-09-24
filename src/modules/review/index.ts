@@ -98,6 +98,32 @@ export async function confirmCampaign(ctx: ReviewCtx, id: string, configInput: u
   });
 }
 
+/**
+ * A reviewer changes the config of a campaign that's already live. Status is
+ * unchanged; the new config applies to every reservation from now on (jobs
+ * already reserved keep the parameters they were issued).
+ */
+export async function editCampaignConfig(ctx: ReviewCtx, id: string, configInput: unknown) {
+  requireHuman(ctx);
+  const c = await loadCampaign(ctx.db, id);
+  if (c.status !== "active" && c.status !== "paused") {
+    throw new ReviewError("invalid_state", `Campaign is ${c.status}; only an active or paused campaign's config is edited here`);
+  }
+  const config = validateCampaignConfig(configInput);
+  if (canonical(config) === canonical(c.config)) return { id, status: c.status, edited: false };
+  const at = ctx.now?.() ?? new Date();
+  return ctx.db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(campaigns)
+      .set({ config, configConfirmedAt: at, configConfirmedBy: ctx.actor, updatedAt: at })
+      .where(and(eq(campaigns.id, id), inArray(campaigns.status, ["active", "paused"])))
+      .returning({ id: campaigns.id });
+    if (!row) throw new ReviewError("invalid_state", "Campaign changed status while saving; reload and try again");
+    await audit(tx, { entityType: "campaign", entityId: id, action: "edit_config", actor: ctx.actor, details: { before: c.config, after: config } });
+    return { id, status: c.status, edited: true };
+  });
+}
+
 /** Sends a draft back to the operator with what to change (→ needs_attention). */
 export async function requestConfigChanges(ctx: ReviewCtx, id: string, reason: string) {
   requireHuman(ctx);

@@ -37,7 +37,7 @@ export function remoteTarget(env: NodeJS.ProcessEnv): { url: string; token: stri
 }
 
 const FILE_OPTIONS = ["--file", "--ops-file"];
-const LONG_COMMANDS = new Set(["package"]);
+const LONG_COMMANDS = new Set(["package", "source upload"]);
 
 const fail = (code: string, message: string, exitCode = 1): RunResult => ({ exitCode, output: { error: { code, message } } });
 
@@ -111,7 +111,7 @@ export async function runRemote(argv: string[], opts: RemoteOptions): Promise<Ru
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${opts.token}` },
       body: JSON.stringify({ argv: prepared.argv, ...(stdin !== undefined ? { stdin } : {}) }),
-      signal: AbortSignal.timeout(LONG_COMMANDS.has(argv[0] ?? "") ? 45 * 60_000 : 5 * 60_000),
+      signal: AbortSignal.timeout((LONG_COMMANDS.has(argv[0] ?? "") || LONG_COMMANDS.has(argv.slice(0, 2).join(" "))) ? 45 * 60_000 : 5 * 60_000),
     });
   } catch (err) {
     // The command may or may not have run; the caller should check state before repeating it.

@@ -10,7 +10,7 @@ Goal: every `needs_attention`, `validation_failed` and `submit_failed` item ends
 | Unsupported footage host (Kick, MediaSilo, portal) | Report the link. The fix is a person downloading and re-sharing, or skipping. |
 | `unsupported_extension`, file too large/long | Confirm the file really isn't usable. `footage skip` it with the reason so it isn't re-selected. |
 | Drive quota / "too many users" / timeout | Transient. `record-failure` already put the job back in `queued`; it gets reserved again on a later run, up to 3 tries, then lands here. Only report it once retries are exhausted. |
-| OpusClip rejected the URL | Check the URL form matches the kind table in `docs/ARCHITECTURE.md`. If it's a code bug, say so and include the error. Don't resubmit by hand. |
+| OpusClip rejected the URL | Check the URL form matches the kind table in `docs/ARCHITECTURE.md`. If it's a code bug, say so and include the error. Don't resubmit by hand. Once the cause is fixed (e.g. a Drive job submitted as a link before uploads existed), `clipper source validate <jobId>` re-queues it and drops any old upload; then go through [Submit](submit.md) as normal. |
 | Insufficient credits, or `reserve` refused for budget | Report it with the `clipper credits` numbers. Don't retry. |
 | Hook blocked a submit | Something differed from the reservation. Report exactly what, and don't retry with edited parameters. |
 | Campaign ended or paused on Content Rewards | Report it and suggest pausing the campaign here. |

@@ -110,9 +110,9 @@ If validation fails, the job goes to **Needs Attention** with a clear reason. It
 
 ### 5. Hand off to OpusClip
 
-OpusClip's API ingests video by URL (`POST /api/clip-projects` with `videoUrl`) from YouTube, Google Drive, Dropbox, Frame.io, Loom, Vimeo, Twitch and public S3 MP4 links. The platform submits the public link; it never downloads, streams or re-hosts source video.
+OpusClip's API ingests video by URL (`POST /api/clip-projects` with `videoUrl`) from YouTube, Vimeo, Twitch and similar hosts. It refuses Google Drive links, so Drive videos go in through OpusClip's upload link instead: `clipper source upload` copies the file from Drive into OpusClip's storage in chunks, passing it through without keeping a copy, and the job then submits the upload ID.
 
-The only failure modes are request-level: OpusClip rejecting the URL, a timeout, or a host temporarily throttling a heavily-shared file (Google Drive's anonymous-download quota). Throttling and timeouts are retried; a rejected URL is not.
+The only failure modes are request-level: OpusClip rejecting the URL, a timeout, or a host temporarily throttling a heavily-shared file (Google Drive's anonymous-download quota, which can also stop an upload). Throttling and timeouts are retried; a rejected URL is not.
 
 ### 6. Generate candidate clips
 

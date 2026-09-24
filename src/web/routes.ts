@@ -10,6 +10,7 @@ import {
   candidateDetail,
   candidatesByStatus,
   confirmCampaign,
+  editCampaignConfig,
   decideCandidate,
   recordPost,
   requestConfigChanges,
@@ -278,7 +279,13 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
         const paused = c.status === "paused";
         actions = html`<h2>Confirmed config</h2>
           <p class="muted">Confirmed by ${c.configConfirmedBy ?? "?"} ${when(c.configConfirmedAt)}</p>
-          <pre class="card">${JSON.stringify(cfg, null, 2)}</pre>
+          <form method="post" action="/campaigns/${c.id}/edit-config" class="card">
+            <p>Change it here if something should work differently (e.g. <code>captionsEnabled</code>, <code>originalAudioOnly</code>). It applies to videos submitted from now on; clips already made keep their settings.</p>
+            <label for="config">Config (JSON)</label>
+            <textarea id="config" name="config" rows="24" spellcheck="false">${JSON.stringify(cfg, null, 2)}</textarea>
+            <label class="check"><input type="checkbox" name="checked" value="yes" required> I checked this against the brief</label>
+            <button>Save config</button>
+          </form>
           <form method="post" action="/campaigns/${c.id}/${paused ? "resume" : "pause"}" class="card">
             <label for="reason">${paused ? "Resume" : "Pause"}: reason (optional)</label>
             <input id="reason" name="reason">
@@ -323,6 +330,20 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
         return back(reply, path, { error: `Config isn't valid JSON: ${(err as Error).message}` });
       }
       return act(reply, path, "Confirmed. The campaign is active.", () => confirmCampaign(ctx(req), id, config));
+    });
+
+    scope.post("/campaigns/:id/edit-config", async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const form = (req.body ?? {}) as Form;
+      const path = `/campaigns/${id}`;
+      if (form.checked !== "yes") return back(reply, path, { error: "Tick the box to confirm you checked the config against the brief." });
+      let config: unknown;
+      try {
+        config = JSON.parse(form.config ?? "");
+      } catch (err) {
+        return back(reply, path, { error: `Config isn't valid JSON: ${(err as Error).message}` });
+      }
+      return act(reply, path, "Config saved. It applies to the next videos submitted.", () => editCampaignConfig(ctx(req), id, config));
     });
 
     scope.post("/campaigns/:id/request-changes", async (req, reply) => {

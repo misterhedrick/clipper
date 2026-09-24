@@ -5,6 +5,9 @@ import { campaigns, creditLedger, sourceJobs, type FootageKind } from "../../db/
 import { transition } from "../../db/transition.js";
 import { validateCampaignConfig } from "../campaign-config/index.js";
 import { estimateCredits, lockBudget, usedToday } from "../credits/index.js";
+import { needsUpload } from "./upload.js";
+
+export { driveDownloadUrl, needsUpload, UploadError, uploadSource, type UploadInput } from "./upload.js";
 
 // The "record first, then spend" protocol (docs/ARCHITECTURE.md). The database
 // decides whether an OpusClip submission may happen and with exactly which
@@ -82,20 +85,32 @@ export async function checkReachable(kind: FootageKind, url: string, fetchImpl: 
   return { reachable: true, status: res.status };
 }
 
-/** Checks a selected video can be submitted: campaign confirmed + active, source publicly reachable. */
+/**
+ * Checks a selected video can be submitted: campaign confirmed + active, source
+ * publicly reachable. Also re-queues a submit_failed job once its cause is fixed;
+ * that drops any earlier OpusClip upload so the video is uploaded afresh.
+ */
 export async function validateSource(ctx: SubmitCtx, jobId: string) {
   const { job, campaign } = await loadJob(ctx.db, jobId);
   if (job.decision !== "selected") throw new SubmissionError("invalid_state", `Job ${jobId} was skipped, not selected`);
-  if (!["detected", "validation_failed", "queued"].includes(job.status)) {
-    throw new SubmissionError("invalid_state", `Job ${jobId} is ${job.status}; only detected/validation_failed jobs are validated`);
+  if (!["detected", "validation_failed", "submit_failed", "queued"].includes(job.status)) {
+    throw new SubmissionError("invalid_state", `Job ${jobId} is ${job.status}; only detected/validation_failed/submit_failed jobs are validated`);
   }
   requireActiveCampaign(campaign);
   if (job.status === "queued") return { id: job.id, status: "queued" as const, alreadyValid: true };
 
   const check = await checkReachable(job.sourceKind, job.sourceUrl, ctx.fetch);
   if (check.reachable) {
-    await transition(ctx.db, { entity: "source_job", id: job.id, to: "queued", actor: ctx.actor, reason: "source validated" });
-    return { id: job.id, status: "queued" as const, check };
+    const retry = job.status === "submit_failed";
+    await transition(ctx.db, {
+      entity: "source_job",
+      id: job.id,
+      to: "queued",
+      actor: ctx.actor,
+      reason: retry ? `source re-validated after submit failure (${job.statusReason ?? "no reason recorded"})` : "source validated",
+      ...(retry ? { set: { opusclipUploadId: null } } : {}),
+    });
+    return { id: job.id, status: "queued" as const, check, ...(needsUpload(job.sourceKind) ? { next: "upload" as const } : {}) };
   }
   const reason = `source_unreachable: ${check.reason}`;
   if (job.status === "detected") {
@@ -125,7 +140,8 @@ export function buildSubmitParams(
 ): Record<string, unknown> {
   const c = validateCampaignConfig(config).clipGeneration;
   return {
-    videoUrl: job.sourceUrl,
+    // Drive videos go in through OpusClip's upload link (`source upload`); the rest by URL.
+    videoUrl: job.opusclipUploadId ?? job.sourceUrl,
     title: submitTitle(job.id),
     aspectRatio: c.aspectRatio,
     clipDurationsSec: [[c.minDurationSeconds, c.maxDurationSeconds]],
@@ -157,6 +173,12 @@ export async function reserve(ctx: SubmitCtx, jobId: string, input: ReserveInput
       throw new SubmissionError("invalid_state", `Job ${jobId} is ${job.status}; only queued jobs can be reserved (run \`source validate\` first)`);
     }
     if (job.opusclipProjectId) throw new SubmissionError("invalid_state", `Job ${jobId} already has OpusClip project ${job.opusclipProjectId}`);
+    if (needsUpload(job.sourceKind) && !job.opusclipUploadId) {
+      throw new SubmissionError(
+        "invalid_state",
+        `Job ${jobId} is a Google Drive file, which OpusClip won't fetch by link; upload it first (opusclip_create_upload_link, then \`source upload\`)`,
+      );
+    }
 
     const today = await usedToday(tx, undefined);
     const campaignToday = await usedToday(tx, campaign.id);

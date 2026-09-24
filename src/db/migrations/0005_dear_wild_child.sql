@@ -1,0 +1,1 @@
+ALTER TABLE "source_jobs" ADD COLUMN "opusclip_upload_id" text;

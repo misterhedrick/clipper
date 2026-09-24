@@ -54,6 +54,7 @@ There is no background worker, cron job or scheduled run: nothing happens unless
 
 The connector can spend credits the moment Claude calls `opusclip_submit_project`, and code can't intercept a connector call. So the protocol makes the database the gate, and the connector call only follows a green light from it:
 
+0. **Upload (Google Drive only).** OpusClip's API refuses Drive links ("Unsupported video link", seen live 2026-09-24), so a queued Drive job is copied into OpusClip's storage first: Claude calls `opusclip_create_upload_link`, then `clipper source upload <jobId> --upload-url <upload_url> --upload-id <upload_id>`. The server copies the file from Drive's public download in 16 MiB chunks into that signed Google Cloud Storage URL (resumable upload; one chunk in memory, nothing stored), refuses any upload URL not on `storage.googleapis.com`, and records `opusclip_upload_id` on the job. `reserve` refuses a Drive job without one, and its `submitParams.videoUrl` is the upload ID. A job that failed to submit is re-queued with `source validate`, which drops the old upload.
 1. **Reserve.** `clipper source reserve <jobId> --opus-remaining <n> [--range <startSec>-<endSec>] [--estimated-minutes <m>]`. In one transaction, the CLI checks:
    - the job is `queued`, its campaign is `active`, and it has no project and no open reservation;
    - the estimate fits the daily and per-campaign budgets in `credit_ledger`, **and** fits `--opus-remaining`, the figure Claude just read from `opusclip_get_usage`.
@@ -110,6 +111,7 @@ clipper footage list <campaignId> [--decision selected|skipped]               (r
 
 # Processing (OpusClip calls themselves go through the connector; see "record first, then spend")
 clipper source validate <sourceJobId>               checks: campaign confirmed + active, source publicly reachable (Drive: no sign-in redirect; YouTube: oEmbed) → queued
+clipper source upload <sourceJobId> --upload-url <u> --upload-id <id>   Drive jobs only: copy the video into OpusClip's storage (from opusclip_create_upload_link)
 clipper source reserve <sourceJobId> --opus-remaining <n> [--range a-b] [--estimated-minutes m]
                                                     budget + dedupe check, reserve credits → submitting; returns submitParams
 clipper source record-project <sourceJobId> --project-id <id>     → project_created
@@ -140,8 +142,8 @@ clipper notify --message "..."                      send a message to the human 
 
 | Kind | Example URL | Listing | `source_key` | OpusClip `videoUrl` |
 |---|---|---|---|---|
-| `gdrive_folder` | `drive.google.com/drive/folders/{id}` | `embeddedfolderview?id=` (keyless, recursive). Drive API v3 + key as a fallback | per file: `gdrive:{fileId}` | `drive.google.com/file/d/{fileId}/view` |
-| `gdrive_file` | `drive.google.com/file/d/{id}/view` | — | `gdrive:{fileId}` | as given |
+| `gdrive_folder` | `drive.google.com/drive/folders/{id}` | `embeddedfolderview?id=` (keyless, recursive). Drive API v3 + key as a fallback | per file: `gdrive:{fileId}` | the upload ID from `source upload` (OpusClip refuses Drive links) |
+| `gdrive_file` | `drive.google.com/file/d/{id}/view` | — | `gdrive:{fileId}` | the upload ID from `source upload` |
 | `youtube_channel` | `youtube.com/@handle` | resolve channel ID from page → `feeds/videos.xml?channel_id=` (15 most recent) | per video: `youtube:{videoId}` | `youtube.com/watch?v={videoId}` |
 | `youtube_video` | `youtube.com/watch?v=`, `youtu.be/`, `/shorts/` | — | `youtube:{videoId}` | canonical watch URL |
 | `s3_mp4` | Content Rewards `publicassetsbucket` video refs | from `referenceMaterials` (`type: video`) | `s3:{sha1(url)}` | as given |

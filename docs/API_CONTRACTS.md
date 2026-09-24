@@ -109,7 +109,10 @@ Two viable approaches, in preference order:
 
 Use option 1. Each returned file's `id` is the `drive_file_id` used for dedupe in `DATA_MODEL.md`, and `md5Checksum` is reliably present for binary video files.
 
-**Direct source URL to hand OpusClip:** `https://drive.google.com/file/d/{fileId}/view?usp=sharing` (OpusClip's documented Google Drive support consumes this share-link form, not a raw download URL).
+**OpusClip does not accept Drive links** (verified live 2026-09-24: `opusclip_submit_project` with `drive.google.com/file/d/{id}/view` → "Unsupported video link. Please submit links from YouTube, Vimeo, Zoom, Rumble, Twitch, Facebook, LinkedIn, Twitter, StreamYard, Iconik and ON24 or upload your video files."). Drive videos are uploaded instead (`clipper source upload`):
+
+- **Download:** `https://drive.usercontent.google.com/download?id={fileId}&export=download&confirm=t` serves a public file directly (`confirm=t` skips the large-file scan page) and honours `Range` (206 with `content-range: bytes a-b/total`). An HTML response means private, deleted or over quota.
+- **Upload:** `opusclip_create_upload_link` returns `upload_id` and a signed `upload_url` on `storage.googleapis.com` (valid 24 h; 100 GB storage quota). `POST upload_url` with `x-goog-resumable: start` → 201 with the session URL in `Location`; then `PUT` chunks (multiples of 256 KiB) with `content-range: bytes a-b/total` → 308 until the last → 200. Verified live. `opusclip_submit_project` then takes `videoUrl: <upload_id>`.
 
 ---
 
@@ -212,4 +215,4 @@ OpusClip supports a webhook callback configured via `conclusionActions` in the c
 
 ### Google Drive as an ingestion source — the one operational risk
 
-OpusClip fetches the video from the `videoUrl` server-side. Google Drive applies an anti-abuse download quota to anonymous/public links; if a campaign's footage file has had heavy traffic, OpusClip's fetch can be transiently rejected by Drive. Treat this as retryable (see README § Retry policy) — do not treat repeated failures on the same file as a permanent error until several retries with backoff have been exhausted.
+`clipper source upload` downloads the video from Drive (OpusClip won't). Google Drive applies an anti-abuse download quota to anonymous/public links; if a campaign's footage file has had heavy traffic, the download can be transiently rejected by Drive (an HTML page instead of the video, reported as `not_downloadable`). Treat this as retryable (see README § Retry policy) — do not treat repeated failures on the same file as a permanent error until several retries with backoff have been exhausted.

@@ -10,6 +10,7 @@ Goal: turn selected footage into OpusClip projects without spending a credit out
 Take `clipper source list --status detected`, then `--status queued`. Order by highest-paying active campaign, then by the video most likely to yield clips.
 
 1. `clipper source validate <jobId>`. Failures move to `validation_failed` with a reason. Don't retry them; they show up in triage.
+   **Google Drive files** (`kind: gdrive_file`; validate answers `next: "upload"`): OpusClip won't fetch Drive links, so upload first. Call `opusclip_create_upload_link` with `fileName` (the job's name) and `sizeMb` (2048 unless you know it's bigger), then `clipper source upload <jobId> --upload-url <upload_url> --upload-id <upload_id>`. It takes a few minutes per GB. `not_downloadable` means Drive didn't serve the file (private, deleted, or over its download quota): report it. `upload_failed`: try once more with a fresh upload link, then report it. A job that already has an upload returns `alreadyUploaded`; don't create another link for it.
 2. `clipper source reserve <jobId> --opus-remaining <monthly.remaining>`, plus:
    - `--range 0-600` for a campaign's **first** submission. Ten minutes, about 10 credits, is enough to judge output quality.
    - `--estimated-minutes <m>` if you know the length (from a title like "Full Special (58:12)" or a listing). Otherwise leave it and the default 90-minute hold applies.

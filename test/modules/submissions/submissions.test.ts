@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { createDb, type Db } from "../../../src/db/client.js";
 import { auditLog, campaigns, creditLedger, sourceJobs, statusEvents } from "../../../src/db/schema.js";
 import {
@@ -10,6 +10,7 @@ import {
   recordFailure,
   recordProject,
   reserve,
+  uploadSource,
   validateSource,
   type SubmitCtx,
 } from "../../../src/modules/submissions/index.js";
@@ -39,14 +40,18 @@ describe.skipIf(!TEST_DATABASE_URL)("submission protocol", () => {
     await truncateAll(db);
   });
 
-  /** An active, confirmed long-form campaign (as if a reviewer confirmed it) with one job. */
-  async function setup(jobStatus: "detected" | "queued" = "queued", crId = "cr-sub", fileId = "file-1") {
+  /**
+   * An active, confirmed long-form campaign (as if a reviewer confirmed it) with one
+   * Drive job. A queued job is already uploaded to OpusClip unless `uploaded` is false.
+   */
+  async function setup(jobStatus: "detected" | "queued" = "queued", crId = "cr-sub", fileId = "file-1", uploaded = jobStatus === "queued") {
     const c = await insertCampaign(db, crId, "active");
     await db
       .update(campaigns)
       .set({ campaignType: "lf", config: validConfig() as never, configConfirmedAt: new Date(), configConfirmedBy: "reviewer:test" })
       .where(eq(campaigns.id, c.id));
     const job = await insertSourceJob(db, c.id, fileId, { status: jobStatus });
+    if (uploaded) await db.update(sourceJobs).set({ opusclipUploadId: `UPL_${fileId}` }).where(eq(sourceJobs.id, job.id));
     return { campaignId: c.id, jobId: job.id };
   }
   const job = async (id: string) => (await db.select().from(sourceJobs).where(eq(sourceJobs.id, id)))[0]!;
@@ -91,7 +96,7 @@ describe.skipIf(!TEST_DATABASE_URL)("submission protocol", () => {
       const r = await reserve(ctx(), jobId, { opusRemaining: 900, range: "0-600" });
       expect(r.credits).toBe(10);
       expect(r.submitParams).toEqual({
-        videoUrl: "https://drive.google.com/file/d/file-1/view",
+        videoUrl: "UPL_file-1",
         title: `clipper:${jobId}`,
         aspectRatio: "portrait",
         clipDurationsSec: [[15, 60]],
@@ -134,6 +139,7 @@ describe.skipIf(!TEST_DATABASE_URL)("submission protocol", () => {
     it("enforces a campaign's own daily cap", async () => {
       const a = await setup("queued", "cr-cap", "a");
       const b = await insertSourceJob(db, a.campaignId, "b", { status: "queued" });
+      await db.update(sourceJobs).set({ opusclipUploadId: "UPL_b" }).where(eq(sourceJobs.id, b.id));
       await db.update(campaigns).set({ maxDailyCredits: 15 });
       await reserve(ctx(), a.jobId, { opusRemaining: 900, range: "0-600" });
       expect(await errCode(reserve(ctx(), b.id, { opusRemaining: 900, range: "0-600" }))).toBe("budget_exceeded");
@@ -190,6 +196,92 @@ describe.skipIf(!TEST_DATABASE_URL)("submission protocol", () => {
       for (const m of ["Unsupported video URL", "Insufficient credits", "Video is private"]) {
         expect(classifyConnectorError(m), m).toBe("permanent");
       }
+    });
+  });
+
+  describe("upload (Drive → OpusClip storage)", () => {
+    const UPLOAD_URL = "https://storage.googleapis.com/ext.gcs.opus.pro/upload/UPL_new/video-raw.video?X-Goog-Signature=sig";
+    const SESSION = "https://storage.googleapis.com/upload/session/abc";
+    const KiB = 1024;
+
+    /** Fake Drive (serves `size` bytes by range) and GCS resumable upload endpoint, recording what was sent. */
+    function fakeServices(size: number, driveType = "video/mp4") {
+      const file = new Uint8Array(size).map((_, i) => i % 251);
+      const puts: { range: string; bytes: number }[] = [];
+      const received: Uint8Array[] = [];
+      const f = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        const headers = new Headers(init?.headers);
+        if (url.startsWith("https://drive.usercontent.google.com/download?id=")) {
+          if (driveType.startsWith("text/html")) return new Response("<html>quota exceeded</html>", { status: 200, headers: { "content-type": driveType } });
+          const [, a, b] = headers.get("range")!.match(/bytes=(\d+)-(\d+)/)!.map(Number);
+          const end = Math.min(b!, size - 1);
+          return new Response(file.slice(a!, end + 1), { status: 206, headers: { "content-type": driveType, "content-range": `bytes ${a}-${end}/${size}` } });
+        }
+        if (url === UPLOAD_URL && init?.method === "POST") {
+          expect(headers.get("x-goog-resumable")).toBe("start");
+          return new Response(null, { status: 201, headers: { location: SESSION } });
+        }
+        if (url === SESSION && init?.method === "PUT") {
+          const range = headers.get("content-range")!;
+          const body = init.body as Uint8Array;
+          puts.push({ range, bytes: body.byteLength });
+          received.push(body);
+          const [, , end, total] = range.match(/bytes (\d+)-(\d+)\/(\d+)/)!.map(Number);
+          return new Response(null, { status: end === total! - 1 ? 200 : 308 });
+        }
+        throw new Error(`unexpected request ${init?.method ?? "GET"} ${url}`);
+      }) as unknown as typeof fetch;
+      return { f, puts, received, file };
+    }
+
+    it("reserve refuses a Drive job that hasn't been uploaded", async () => {
+      const { jobId } = await setup("queued", "cr-sub", "file-1", false);
+      await expect(reserve(ctx(), jobId, { opusRemaining: 900, range: "0-600" })).rejects.toMatchObject({ code: "invalid_state", message: expect.stringContaining("source upload") });
+      expect(await ledger()).toHaveLength(0);
+    });
+
+    it("copies the file in chunks, records the upload ID once, and reserve then submits the upload ID", async () => {
+      const { jobId } = await setup("queued", "cr-sub", "file-1", false);
+      const svc = fakeServices(600 * KiB);
+      const res = await uploadSource({ db, actor: "claude-operator", fetch: svc.f }, jobId, { uploadUrl: UPLOAD_URL, uploadId: "UPL_new", chunkBytes: 256 * KiB });
+      expect(res).toMatchObject({ uploadId: "UPL_new", bytes: 600 * KiB });
+      expect(svc.puts).toEqual([
+        { range: `bytes 0-${256 * KiB - 1}/${600 * KiB}`, bytes: 256 * KiB },
+        { range: `bytes ${256 * KiB}-${512 * KiB - 1}/${600 * KiB}`, bytes: 256 * KiB },
+        { range: `bytes ${512 * KiB}-${600 * KiB - 1}/${600 * KiB}`, bytes: 88 * KiB },
+      ]);
+      expect(Buffer.concat(svc.received).equals(Buffer.from(svc.file))).toBe(true);
+      expect(await job(jobId)).toMatchObject({ opusclipUploadId: "UPL_new", sizeBytes: 600 * KiB, status: "queued" });
+      expect(await db.select().from(auditLog).where(eq(auditLog.action, "upload"))).toHaveLength(1);
+
+      const again = await uploadSource({ db, actor: "claude-operator", fetch: svc.f }, jobId, { uploadUrl: UPLOAD_URL, uploadId: "UPL_other" });
+      expect(again).toMatchObject({ uploadId: "UPL_new", alreadyUploaded: true });
+
+      const { submitParams } = await reserve(ctx(), jobId, { opusRemaining: 900, range: "0-600" });
+      expect(submitParams.videoUrl).toBe("UPL_new");
+    });
+
+    it("only talks to OpusClip's storage, and refuses a Drive page that isn't the video", async () => {
+      const { jobId } = await setup("queued", "cr-sub", "file-1", false);
+      const upload = (f: typeof fetch, uploadUrl = UPLOAD_URL) => uploadSource({ db, actor: "claude-operator", fetch: f }, jobId, { uploadUrl, uploadId: "UPL_new" });
+      const svc = fakeServices(10);
+      await expect(upload(svc.f, "https://evil.example/upload")).rejects.toMatchObject({ code: "invalid_argument" });
+      await expect(upload(svc.f, "http://storage.googleapis.com/x")).rejects.toMatchObject({ code: "invalid_argument" });
+      expect(svc.f).not.toHaveBeenCalled();
+
+      await expect(upload(fakeServices(10, "text/html; charset=utf-8").f)).rejects.toMatchObject({ code: "not_downloadable" });
+      expect((await job(jobId)).opusclipUploadId).toBeNull();
+    });
+
+    it("validate re-queues a submit_failed job and drops its old upload", async () => {
+      const { jobId } = await setup();
+      await reserve(ctx(), jobId, { opusRemaining: 900, range: "0-600" });
+      await recordFailure(ctx(), jobId, "Unsupported video link.");
+      expect(await validateSource(ctx(), jobId)).toMatchObject({ status: "queued", next: "upload" });
+      expect(await job(jobId)).toMatchObject({ status: "queued", opusclipUploadId: null });
+      const events = await db.select().from(statusEvents).where(and(eq(statusEvents.entityId, jobId), eq(statusEvents.fromStatus, "submit_failed")));
+      expect(events).toEqual([expect.objectContaining({ toStatus: "queued", reason: expect.stringContaining("re-validated after submit failure") })]);
     });
   });
 
