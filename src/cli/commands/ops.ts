@@ -1,14 +1,27 @@
 import { loadConfig } from "../../config.js";
 import { listAttention, notifyAttention } from "../../modules/attention/index.js";
-import { sendNotification } from "../../modules/notifier/index.js";
+import { MAX_MESSAGE_CHARS, sendNotification, truncate } from "../../modules/notifier/index.js";
 import { packageCandidate } from "../../modules/packaging/index.js";
 import { r2Store } from "../../modules/packaging/r2.js";
+import { DEFAULT_REMOTE_URL } from "../remote.js";
 import { positional, requiredOption, type Command, type CommandContext } from "../run.js";
 
 const notifier = (ctx: CommandContext) => {
   const { NOTIFY_WEBHOOK_URL, REVIEW_URL } = loadConfig(["notify"], ctx.env);
-  return { send: (message: string) => sendNotification({ webhookUrl: NOTIFY_WEBHOOK_URL, fetch: ctx.connector.fetch }, message), reviewUrl: REVIEW_URL };
+  return {
+    send: (message: string) => sendNotification({ webhookUrl: NOTIFY_WEBHOOK_URL, fetch: ctx.connector.fetch }, message),
+    // Every notification links the review page, so a person can act from their phone.
+    reviewUrl: REVIEW_URL ?? DEFAULT_REMOTE_URL,
+  };
 };
+
+/** Appends the review link to a message, keeping the link even when the message is truncated. */
+export function withReviewLink(message: string, reviewUrl: string): string {
+  const body = message.trim();
+  if (!body || body.includes(reviewUrl)) return body;
+  const link = `\nReview: ${reviewUrl}`;
+  return truncate(body, MAX_MESSAGE_CHARS - link.length) + link;
+}
 
 export const packageCommands: Record<string, Command> = {
   "": {
@@ -25,10 +38,13 @@ export const packageCommands: Record<string, Command> = {
 
 export const notifyCommands: Record<string, Command> = {
   "": {
-    summary: "Send a message to the person via NOTIFY_WEBHOOK_URL (e.g. the end-of-run report).",
+    summary: "Send a message to the person via NOTIFY_WEBHOOK_URL (e.g. the end-of-run report), with the review page link appended.",
     usage: '--message "..."',
     options: { message: { type: "string" } },
-    run: (ctx) => notifier(ctx).send(requiredOption(ctx, "message")),
+    run: (ctx) => {
+      const n = notifier(ctx);
+      return n.send(withReviewLink(requiredOption(ctx, "message"), n.reviewUrl));
+    },
   },
 };
 
