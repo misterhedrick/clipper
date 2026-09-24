@@ -35,11 +35,13 @@ Every field needs an entry in `extraction.fieldConfidence` or in `extraction.unr
 
 `clipGeneration.brandTemplateId` decides what OpusClip burns into every clip (logo, watermark, caption style). If it's left out, OpusClip uses the account's default template, and on 2026-09-24 that put the **MW4 (Call of Duty) logo** in the middle of every Charlie Berens clip. Templates can't be created or edited through the API; a person makes them in OpusClip's web app.
 
-1. `opusclip_list_brand_templates`, and match by exact name.
-2. **Brief doesn't ask for a logo, watermark or overlay** (most campaigns): use the template named exactly **`Clean - No Logo`** (no logo, karaoke captions).
+**The account's default template is kept clean: no logo, no overlay, karaoke captions** (cleared 2026-09-24). It's the template for every campaign without logo rules, and the safety net if the field is ever missed. Never ask for a logo to be added to the default.
+
+1. `opusclip_list_brand_templates`.
+2. **Brief doesn't ask for a logo, watermark or overlay** (most campaigns): use the template with `is_default: true` (named `Clean - No Logo` or `Preset template 1`). Put its ID in `brandTemplateId` so the choice is visible in the config.
 3. **Brief requires a logo, watermark or specific caption style:** use a template named after the campaign (e.g. `MW4`). If it doesn't exist yet, put it in "Needs you" with the exact settings: template name, which logo file from the brief, where it goes, caption style. Propose the config with the field in `unresolvedFields`, and say in `unexpressedRules` that the template must be set before confirming.
-4. **Never** use another campaign's template, and never fall back to the default. If `Clean - No Logo` is missing, ask for it to be created (same as step 3) rather than leaving the field out.
-5. When pre-screening a campaign's first clips, look at a thumbnail (`thumbnail_url`) for logos that don't belong to the campaign, and hold every clip that has one.
+4. **Never** use another campaign's template.
+5. When pre-screening a campaign's first clips, look at a thumbnail (`thumbnail_url`) for logos that don't belong to the campaign, and hold every clip that has one. A stray logo on a default-template clip means someone changed the default: report it.
 
 ## 3. Propose it
 
