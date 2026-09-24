@@ -81,7 +81,7 @@ flowchart TD
 | 5 | Brief reader (`campaign brief`, links kept inline) | ✅ |
 | 6 | Campaign config schema + `propose-config` | ✅ |
 | 7 | Footage sourcing (Drive folders, YouTube channels, select/skip) | ✅ |
-| 8 | Credit ledger + submit protocol + guard hook | ✅ code · Drive upload step added 2026-09-24 (OpusClip refuses Drive links) · ⏳ live 10-credit test |
+| 8 | Credit ledger + submit protocol + guard hook | ✅ **live** 2026-09-24: Drive upload (496 MB in 92 s) → reserve → guarded submit → project `P3092415v0K3` recorded, 10 credits |
 | 9 | Collect clips from OpusClip + objective checks (`candidate upsert`) | ✅ code · ⏳ live check (real clip field names) |
 | 10 | Caption validation + pre-screen + reviewer-requested edits | ✅ |
 | 11 | Review web page (confirm configs, approve clips, record posts) | ✅ |
@@ -119,14 +119,14 @@ flowchart TD
 | MW4 (Call of Duty) | `pending_confirmation` | Real caption rules drafted. **Footage is on MediaSilo, which OpusClip can't read**, and the campaign is paused on Content Rewards. |
 | Charlie Berens | `discovered`, classified long-form | Drive folder registered; one full special selected. **Best first real test.** |
 
-The **live database (Supabase)** holds one campaign as of 2026-09-24: **Charlie Berens**, `active` (config confirmed by `reviewer:Daniel`). Its Drive folder is registered and both full specials are selected. The first 10-minute submission of *Neighborly* was **rejected by OpusClip: it doesn't accept Google Drive links**, so no credits were spent; that job (`547c34b5`) is `submit_failed` and gets re-queued once the Drive upload step is live.
+The **live database (Supabase)** holds one campaign as of 2026-09-24: **Charlie Berens**, `active` (config confirmed by `reviewer:Daniel`). Its Drive folder is registered and both full specials are selected. The first submission as a Drive link was rejected (OpusClip doesn't accept Drive links), so the Drive upload step was built; with it, a 10-minute slice of *Neighborly* (job `547c34b5`) was uploaded and submitted on 2026-09-24 as OpusClip project `P3092415v0K3` (10 credits, captions on). *Midwest Goodbye* is held until that test is judged.
 
 ## 6. What's next
 
 1. **First real test (closes out tasks 8, 9 and 12), once you've done the §7 items.**
    1. ✅ An operator run added Charlie Berens to the live database and onboarded it (2026-09-23) → `pending_confirmation`.
    2. ✅ Config confirmed on the review page (2026-09-24). You can now edit a live campaign's config there too: turn on `captionsEnabled` and `originalAudioOnly` (recommended) before the retry.
-   3. You start another run; it re-queues the *Neighborly* job, uploads it to OpusClip (`source upload`, ~500 MB), and submits a 10-minute slice (~10 credits). A later run you start collects the clips (`candidate upsert`), pre-screens them and drafts captions.
+   3. ✅ A run re-queued the *Neighborly* job, uploaded it to OpusClip and submitted a 10-minute slice (10 credits, 2026-09-24). Next: a run you start collects the clips (`candidate upsert`), pre-screens them and drafts captions.
    4. You approve a clip. The next run you start exports it and runs `clipper package`, and you get the bundle link.
 
    On the first upsert, check the real `opusclip_list_clips` field names and stage values against the parser (`src/modules/candidates/opusclip.ts`), and narrow it to what OpusClip actually sends.
