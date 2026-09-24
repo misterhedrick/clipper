@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { EnvHttpProxyAgent, fetch as undiciFetch } from "undici";
+import { DEFAULT_APP_URL } from "../config.js";
 import type { RunResult } from "./run.js";
 
 // Remote mode for the `clipper` CLI. When CLIPPER_REMOTE_URL is set (the
@@ -23,7 +23,7 @@ export type RemoteOptions = {
 };
 
 /** The deployed review app. Not a secret; CLIPPER_REMOTE_URL overrides it. */
-export const DEFAULT_REMOTE_URL = "https://clipper-review.onrender.com";
+export const DEFAULT_REMOTE_URL = DEFAULT_APP_URL;
 
 /**
  * Where commands run. Remote mode is on when an operator token is present (the
@@ -67,15 +67,19 @@ export async function prepareArgv(argv: string[]): Promise<{ argv: string[]; std
   return { argv: out, stdin, needsStdin };
 }
 
-function proxiedFetch(): typeof fetch {
+async function proxiedFetch(): Promise<typeof fetch> {
   // Node's own fetch ignores HTTPS_PROXY; undici's agent honours it and NO_PROXY.
+  // Imported lazily: loading the undici package replaces Node's global dispatcher,
+  // after which the built-in fetch stops decoding gzip bodies (Drive listings
+  // arrive as binary). Only remote mode, which makes no other requests, loads it.
+  const { EnvHttpProxyAgent, fetch: undiciFetch } = await import("undici");
   const dispatcher = new EnvHttpProxyAgent();
   return ((input: string | URL, init?: RequestInit) => undiciFetch(input as string, { ...(init as object), dispatcher } as never)) as unknown as typeof fetch;
 }
 
 export async function runRemote(argv: string[], opts: RemoteOptions): Promise<RunResult> {
   const base = opts.url.replace(/\/+$/, "");
-  const doFetch = opts.fetch ?? proxiedFetch();
+  const doFetch = opts.fetch ?? (await proxiedFetch());
   const sleep = opts.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
 
   let prepared;
