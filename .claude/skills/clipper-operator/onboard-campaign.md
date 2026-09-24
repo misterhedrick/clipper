@@ -29,7 +29,17 @@ Write `config.json` matching the `CampaignConfig` schema (`docs/DATA_MODEL.md`).
 
 Put every rule the config can't express in `extraction.unexpressedRules`, one per entry. The person reviewing needs them: dedicated-page requirements, audience tier, "stay live 30 days", "don't make the brand look bad", content filters like "only videos with 1win merch".
 
-Every field needs an entry in `extraction.fieldConfidence` or in `extraction.unresolvedFields`. `brandTemplateId` comes from `opusclip_list_brand_templates`; omit it and list it as unresolved if none fits.
+Every field needs an entry in `extraction.fieldConfidence` or in `extraction.unresolvedFields`.
+
+### Brand template: always set one, never leave it blank
+
+`clipGeneration.brandTemplateId` decides what OpusClip burns into every clip (logo, watermark, caption style). If it's left out, OpusClip uses the account's default template, and on 2026-09-24 that put the **MW4 (Call of Duty) logo** in the middle of every Charlie Berens clip. Templates can't be created or edited through the API; a person makes them in OpusClip's web app.
+
+1. `opusclip_list_brand_templates`, and match by exact name.
+2. **Brief doesn't ask for a logo, watermark or overlay** (most campaigns): use the template named exactly **`Clean - No Logo`** (no logo, karaoke captions).
+3. **Brief requires a logo, watermark or specific caption style:** use a template named after the campaign (e.g. `MW4`). If it doesn't exist yet, put it in "Needs you" with the exact settings: template name, which logo file from the brief, where it goes, caption style. Propose the config with the field in `unresolvedFields`, and say in `unexpressedRules` that the template must be set before confirming.
+4. **Never** use another campaign's template, and never fall back to the default. If `Clean - No Logo` is missing, ask for it to be created (same as step 3) rather than leaving the field out.
+5. When pre-screening a campaign's first clips, look at a thumbnail (`thumbnail_url`) for logos that don't belong to the campaign, and hold every clip that has one.
 
 ## 3. Propose it
 
