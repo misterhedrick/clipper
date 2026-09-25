@@ -35,7 +35,7 @@ type CampaignConfig = {
     captionsEnabled: boolean;
   };
   requirements: {
-    requiredOverlayAssetIds: string[];
+    requiredOverlayAssetIds: string[];   // must be empty: logo/watermark campaigns aren't taken on (validator rejects any)
     requiredOnScreenText: string[];
     requiredCaptionLines: string[];           // exact phrases, checked verbatim
     requiredTags: string[];                   // "@handle"

@@ -55,6 +55,16 @@ export const campaignConfigSchema = z
     }),
   })
   .superRefine((c, ctx) => {
+    // Policy (2026-09-25): only campaigns with no logo, watermark or overlay requirement.
+    // Logos come from OpusClip brand templates, which can only be edited on a desktop, and
+    // this pipeline is run from a phone. Such campaigns are flagged or skipped instead.
+    if (c.requirements.requiredOverlayAssetIds.length) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["requirements", "requiredOverlayAssetIds"],
+        message: "campaigns that require a logo, watermark or overlay aren't taken on: flag or skip this campaign instead",
+      });
+    }
     if (c.clipGeneration.minDurationSeconds > c.clipGeneration.maxDurationSeconds) {
       ctx.addIssue({
         code: "custom",

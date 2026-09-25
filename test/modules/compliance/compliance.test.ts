@@ -28,14 +28,13 @@ describe("objective checks", () => {
   });
 
   it("never claims a pass it can't verify", () => {
-    const r = runObjectiveChecks(
-      {},
-      config((c) => {
-        c.requirements.requiredOverlayAssetIds = ["logo"];
-        c.requirements.requiredOnScreenText = ["PRE-ORDER NOW"];
-        c.review.requiredChecks = ["visual_quality", "caption_compliance"];
-      }),
-    );
+    const cfg = config((c) => {
+      c.requirements.requiredOnScreenText = ["PRE-ORDER NOW"];
+      c.review.requiredChecks = ["visual_quality", "caption_compliance"];
+    });
+    // Overlay campaigns can't get a valid config any more, but the check still never claims a pass.
+    cfg.requirements.requiredOverlayAssetIds = ["logo"];
+    const r = runObjectiveChecks({}, cfg);
     expect(r).toEqual({
       duration: "manual_review_required",
       aspect_ratio: "manual_review_required",

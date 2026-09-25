@@ -13,6 +13,7 @@ Goal: recommend campaigns worth running through this pipeline. A person decides 
 4. For LF campaigns, check fit:
    - Is footage on a host OpusClip can ingest? Drive, YouTube, Dropbox, Frame.io, Loom, Vimeo, Twitch, or Content Rewards uploads. Kick, MediaSilo or a custom site means a person must source it: say so.
    - Payout per 1K views and max per clip. Budget remaining is `budgetCents` against spend where visible.
+   - **Logo, watermark or overlay required → skip it.** If the brief asks for a logo, watermark, brand overlay, CTA graphic or overlay pack on the video, it's not a fit: those need an OpusClip brand template, which can only be edited on a desktop, and this pipeline is run from a phone. Don't recommend it; mention it in one line as skipped for that reason. Text the clipper writes (a hook, a caption) is fine.
    - Requirements this setup can't meet: dedicated page, audience tier, a new account, an application.
    - Rules that would cause most OpusClip output to be rejected, e.g. "gameplay must appear in the first 4 seconds" or heavy editing requirements.
 5. Recommend at most five, ranked, one line each: *why it fits, what it needs from a person (join / apply / dedicated page), the expected footage host*. Include the Content Rewards URL.

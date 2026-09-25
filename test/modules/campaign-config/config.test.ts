@@ -61,6 +61,13 @@ describe("validateCampaignConfig", () => {
     expect(issues((c) => (c.extras = {}))).toContainEqual(expect.objectContaining({ path: "(root)" }));
   });
 
+  it("refuses campaigns that require a logo, watermark or overlay", () => {
+    expect(issues((c) => (c.requirements.requiredOverlayAssetIds = ["brand-logo.png"]))).toContainEqual({
+      path: "requirements.requiredOverlayAssetIds",
+      message: expect.stringContaining("aren't taken on"),
+    });
+  });
+
   it("requires min duration ≤ max duration", () => {
     expect(
       issues((c) => {
