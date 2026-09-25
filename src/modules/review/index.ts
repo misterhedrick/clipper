@@ -5,6 +5,8 @@ import {
   POST_PLATFORMS,
   campaigns,
   candidateClips,
+  creditLedger,
+  footageSources,
   posts,
   sourceJobs,
   statusEvents,
@@ -121,6 +123,48 @@ export async function editCampaignConfig(ctx: ReviewCtx, id: string, configInput
     if (!row) throw new ReviewError("invalid_state", "Campaign changed status while saving; reload and try again");
     await audit(tx, { entityType: "campaign", entityId: id, action: "edit_config", actor: ctx.actor, details: { before: c.config, after: config } });
     return { id, status: c.status, edited: true };
+  });
+}
+
+/**
+ * A reviewer removes a campaign they don't want, with its footage sources, jobs,
+ * candidate clips and credit ledger rows, so it can be added again from scratch
+ * later. Refused once anything was posted. The status history stays, and an audit
+ * row records what was removed (OpusClip keeps its own projects and usage).
+ */
+export async function deleteCampaign(ctx: ReviewCtx, id: string, confirmation: string | undefined) {
+  requireHuman(ctx);
+  const c = await loadCampaign(ctx.db, id);
+  if (confirmation?.trim().toLowerCase() !== "delete") throw new ReviewError("invalid_argument", "Type delete to confirm");
+  return ctx.db.transaction(async (tx) => {
+    const jobs = await tx.select({ id: sourceJobs.id }).from(sourceJobs).where(eq(sourceJobs.campaignId, id));
+    const jobIds = jobs.map((j) => j.id);
+    const clips = jobIds.length
+      ? await tx.select({ id: candidateClips.id }).from(candidateClips).where(inArray(candidateClips.sourceJobId, jobIds))
+      : [];
+    const clipIds = clips.map((x) => x.id);
+    if (clipIds.length && (await tx.select({ id: posts.id }).from(posts).where(inArray(posts.candidateClipId, clipIds)).limit(1)).length) {
+      throw new ReviewError("invalid_state", "Clips from this campaign were posted; a campaign with posts can't be deleted");
+    }
+    const ledger = await tx.delete(creditLedger).where(eq(creditLedger.campaignId, id)).returning({ credits: creditLedger.creditsReserved, status: creditLedger.status });
+    if (clipIds.length) await tx.delete(candidateClips).where(inArray(candidateClips.id, clipIds));
+    if (jobIds.length) await tx.delete(sourceJobs).where(inArray(sourceJobs.id, jobIds));
+    const sources = await tx.delete(footageSources).where(eq(footageSources.campaignId, id)).returning({ id: footageSources.id });
+    await tx.delete(campaigns).where(eq(campaigns.id, id));
+    const removed = {
+      footageSources: sources.length,
+      sourceJobs: jobIds.length,
+      candidateClips: clipIds.length,
+      creditsConsumed: ledger.filter((l) => l.status === "consumed").reduce((n, l) => n + l.credits, 0),
+    };
+    await audit(tx, {
+      entityType: "campaign",
+      entityId: id,
+      action: "delete_campaign",
+      actor: ctx.actor,
+      details: { title: c.title, contentRewardsCampaignId: c.contentRewardsCampaignId, status: c.status, ...removed },
+    });
+    return { id, deleted: true as const, ...removed };
   });
 }
 

@@ -12,6 +12,7 @@ import {
   confirmCampaign,
   editCampaignConfig,
   decideCandidate,
+  deleteCampaign,
   recordPost,
   requestConfigChanges,
   ReviewError,
@@ -311,6 +312,15 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
             ${snapshot.payouts ? html`<details><summary>Payouts</summary><pre>${JSON.stringify(snapshot.payouts, null, 2)}</pre></details>` : ""}
           </div>
           ${actions}
+          <details class="card">
+            <summary>Delete this campaign</summary>
+            <form method="post" action="/campaigns/${c.id}/delete">
+              <p>Removes the campaign with its footage, video jobs, clips and credit records, so it can be added again from scratch. Not possible once a clip was posted. OpusClip keeps its own projects.</p>
+              <label for="confirm">Type <strong>delete</strong> to confirm</label>
+              <input id="confirm" name="confirm" autocomplete="off" required>
+              <button class="secondary">Delete campaign</button>
+            </form>
+          </details>
           <h2>History</h2>
           <div class="card scroll"><table>
             ${d.events.map((e) => html`<tr><td class="muted">${when(e.createdAt)}</td><td>${e.fromStatus ?? "·"} → ${e.toStatus}</td><td>${e.actor}</td><td>${e.reason ?? ""}</td></tr>`)}
@@ -344,6 +354,18 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
         return back(reply, path, { error: `Config isn't valid JSON: ${(err as Error).message}` });
       }
       return act(reply, path, "Config saved. It applies to the next videos submitted.", () => editCampaignConfig(ctx(req), id, config));
+    });
+
+    scope.post("/campaigns/:id/delete", async (req, reply) => {
+      const { id } = req.params as { id: string };
+      try {
+        await deleteCampaign(ctx(req), id, ((req.body ?? {}) as Form).confirm);
+      } catch (err) {
+        const msg = errorMessage(err);
+        if (msg === undefined) throw err;
+        return back(reply, `/campaigns/${id}`, { error: msg });
+      }
+      return back(reply, "/campaigns", { ok: "Campaign deleted." });
     });
 
     scope.post("/campaigns/:id/request-changes", async (req, reply) => {

@@ -2,9 +2,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { buildApp } from "../../src/app.js";
 import { createDb, type Db } from "../../src/db/client.js";
-import { auditLog, campaigns, candidateClips, posts, sourceJobs, statusEvents } from "../../src/db/schema.js";
+import { auditLog, campaigns, candidateClips, creditLedger, footageSources, posts, sourceJobs, statusEvents } from "../../src/db/schema.js";
 import { transition } from "../../src/db/transition.js";
-import { confirmCampaign, decideCandidate, editCampaignConfig } from "../../src/modules/review/index.js";
+import { confirmCampaign, decideCandidate, deleteCampaign, editCampaignConfig } from "../../src/modules/review/index.js";
 import { createSession } from "../../src/web/auth.js";
 import { r2Store } from "../../src/modules/packaging/r2.js";
 import { resetTestDatabase, TEST_DATABASE_URL, truncateAll } from "../helpers/db.js";
@@ -221,6 +221,44 @@ describe.skipIf(!TEST_DATABASE_URL)("review web app", () => {
       // Not for drafts (those are confirmed), and never by the operator.
       expect(flash(await post(`/campaigns/${campaignId}/edit-config`, { checked: "yes", config: JSON.stringify(cfg) }, cookie)).error).toMatch(/only an active or paused/);
       await expect(editCampaignConfig({ db, actor: "claude-operator" }, active.id, cfg)).rejects.toMatchObject({ code: "human_only" });
+    });
+  });
+
+  describe("deleting a campaign", () => {
+    const activeId = async () => (await db.select().from(campaigns).where(eq(campaigns.contentRewardsCampaignId, "cr-active")))[0]!.id;
+
+    it("removes the campaign and everything under it, keeping its history, only for a reviewer who types delete", async () => {
+      const { cookie } = await login("alex");
+      const id = await activeId();
+      const [job] = await db.select().from(sourceJobs).where(eq(sourceJobs.campaignId, id));
+      await db.insert(footageSources).values({ campaignId: id, kind: "gdrive_folder", url: "https://drive.google.com/drive/folders/X", label: "footage", addedBy: "claude-operator", reason: "test" });
+      await db.insert(creditLedger).values({ sourceJobId: job!.id, campaignId: id, creditsReserved: 10, status: "consumed", closedAt: new Date() });
+      await transition(db, { entity: "campaign", id, to: "paused", actor: "reviewer:alex" });
+
+      const page = await app.inject({ method: "GET", url: `/campaigns/${id}`, headers: { cookie } });
+      expect(page.body).toContain(`action="/campaigns/${id}/delete"`);
+      expect(flash(await post(`/campaigns/${id}/delete`, { confirm: "yes" }, cookie)).error).toMatch(/Type delete/);
+      await expect(deleteCampaign({ db, actor: "claude-operator" }, id, "delete")).rejects.toMatchObject({ code: "human_only" });
+
+      expect(flash(await post(`/campaigns/${id}/delete`, { confirm: "delete" }, cookie))).toMatchObject({ path: "/campaigns", ok: "Campaign deleted." });
+      expect(await db.select().from(campaigns).where(eq(campaigns.id, id))).toHaveLength(0);
+      expect(await db.select().from(sourceJobs).where(eq(sourceJobs.campaignId, id))).toHaveLength(0);
+      expect(await db.select().from(candidateClips).where(eq(candidateClips.id, candidateId))).toHaveLength(0);
+      expect(await db.select().from(footageSources)).toHaveLength(0);
+      expect(await db.select().from(creditLedger)).toHaveLength(0);
+      expect(await db.select().from(auditLog).where(eq(auditLog.action, "delete_campaign"))).toEqual([
+        expect.objectContaining({ actor: "reviewer:alex", entityId: id, details: expect.objectContaining({ contentRewardsCampaignId: "cr-active", sourceJobs: 1, candidateClips: 1, creditsConsumed: 10 }) }),
+      ]);
+      expect(await events(id, "paused")).toHaveLength(1);
+      // Can be added again from scratch.
+      await insertCampaign(db, "cr-active", "discovered");
+    });
+
+    it("refuses once a clip was posted", async () => {
+      const { cookie } = await login("alex");
+      await db.insert(posts).values({ candidateClipId: candidateId, platform: "tiktok", url: "https://tiktok.com/@me/video/1" });
+      expect(flash(await post(`/campaigns/${await activeId()}/delete`, { confirm: "delete" }, cookie)).error).toMatch(/posted/);
+      expect(await db.select().from(candidateClips).where(eq(candidateClips.id, candidateId))).toHaveLength(1);
     });
   });
 
