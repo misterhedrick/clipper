@@ -126,7 +126,7 @@ Manual-posting tracking (README § "Post manually in version one").
 `src/db/transition.ts` is the only code that writes a `status` column. A static test fails the build if any other file does. Each call:
 - locks the row (`SELECT … FOR UPDATE`), so concurrent transitions serialize;
 - checks the change is in that entity's allowed-transition table (e.g. a source job can't jump from `detected` to `completed`);
-- refuses **human-only** targets unless the actor is `reviewer:<identity>`: campaign → `active`; candidate → `approved`, `needs_edit`, `rejected`, `posted`. The operator (`claude-operator`) and `system` can never make these moves, whatever calls them. The one exception is a revert to a decision a person already made: a failed packaging run goes `exporting` → `approved` (and `exporting` is only reachable from `approved`);
+- refuses **human-only** targets unless the actor is `reviewer:<identity>`: campaign → `active`; candidate → `approved`, `needs_edit`, `rejected`, `posted`. The operator (`claude-operator`) and `system` can never make these moves, whatever calls them, with two exceptions. A revert to a decision a person already made: a failed packaging run goes `exporting` → `approved` (and `exporting` is only reachable from `approved`). And rejecting a clip when a named person asked for it (`requestedBy`, recorded in the reason; `clipper candidate reject`), since a rejection spends and publishes nothing;
 - updates the row (and `status_reason` where the table has it) and inserts the `status_events` row in one transaction.
 
 ## Constraints enforced in the database

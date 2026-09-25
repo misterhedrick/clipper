@@ -9,7 +9,7 @@ A clip-automation pipeline: Content Rewards campaigns → footage → OpusClip �
 
 ## The split to preserve
 
-Code guards state (dedupe, credit budget, caption validation, the approval gate). Claude does reading and judgment through the playbook. People approve, join and post. Never add a CLI command that approves clips, activates campaigns, joins campaigns or posts.
+Code guards state (dedupe, credit budget, caption validation, the approval gate). Claude does reading and judgment through the playbook. People approve, join and post. Never add a CLI command that approves clips, activates campaigns, joins campaigns or posts. The one decision the CLI can make is rejecting clips, and only for a named person who asked (`clipper candidate reject --requested-by`).
 
 ## Commands
 

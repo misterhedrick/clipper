@@ -90,6 +90,17 @@ const humanOnlyReverts: { [E in EntityType]: Partial<Record<StatusOf[E], readonl
   candidate_clip: { approved: ["exporting"] },
 };
 
+/**
+ * Human-only moves automation may make when a named person asked for exactly
+ * that (`requestedBy`): only rejecting clips, which spends nothing and
+ * publishes nothing. The requester goes into the status_events reason.
+ */
+const onPersonsRequest: { [E in EntityType]: readonly StatusOf[E][] } = {
+  campaign: [],
+  source_job: [],
+  candidate_clip: ["rejected"],
+};
+
 /** Human actors are recorded as `reviewer:<identity>`. Anything else is automation. */
 export const isHumanActor = (actor: string) => /^reviewer:\S+$/.test(actor);
 
@@ -118,6 +129,8 @@ export type TransitionInput<E extends EntityType> = {
   set?: Settable<E>;
   /** Refuse unless the current status is one of these (for callers that need a precondition). */
   expectFrom?: readonly StatusOf[E][];
+  /** The person who asked automation to make this move; see `onPersonsRequest`. */
+  requestedBy?: string;
 };
 
 type Executor = Pick<Db, "transaction">;
@@ -152,7 +165,8 @@ export async function transition<E extends EntityType>(
       throw new TransitionError("invalid_transition", `${entity} ${id} cannot go from ${from} to ${to}`);
     }
     const revert = ((humanOnlyReverts[entity] as Record<string, readonly string[] | undefined>)[to] ?? []).includes(from);
-    if ((humanOnly[entity] as readonly string[]).includes(to) && !revert && !isHumanActor(actor)) {
+    const requested = !!input.requestedBy?.trim() && (onPersonsRequest[entity] as readonly string[]).includes(to);
+    if ((humanOnly[entity] as readonly string[]).includes(to) && !revert && !requested && !isHumanActor(actor)) {
       throw new TransitionError("human_only", `only a reviewer can move a ${entity} to ${to} (actor: ${actor})`);
     }
 

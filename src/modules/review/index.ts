@@ -329,5 +329,10 @@ export async function campaignDetail(db: Db, id: string) {
     .where(and(eq(statusEvents.entityType, "campaign"), eq(statusEvents.entityId, id)))
     .orderBy(desc(statusEvents.createdAt))
     .limit(20);
-  return { campaign, events };
+  const waiting = await db
+    .select({ id: candidateClips.id })
+    .from(candidateClips)
+    .innerJoin(sourceJobs, eq(sourceJobs.id, candidateClips.sourceJobId))
+    .where(and(eq(sourceJobs.campaignId, id), inArray(candidateClips.status, ["awaiting_review", "needs_edit"])));
+  return { campaign, events, waitingClips: waiting.length };
 }

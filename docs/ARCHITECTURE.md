@@ -128,6 +128,7 @@ clipper candidate record-edit <id> --ops-file ops.json --reason "..."   log a co
 clipper candidate record-export <id> --url <exportUrl>   store the HD export URL from opusclip_export_clip (approved candidates only)
 clipper candidate prescreen <id> --verdict <recommend|hold|reject> --notes "..."   advisory only; never approves
 clipper candidate set-caption <id> --file caption.txt   validated against campaign requirements
+clipper candidate reject <id...> | --campaign <id> --reason "..." --requested-by <name>   only when a person asked: clips awaiting_review/needs_edit → rejected, requester recorded
 
 # Operations
 clipper package <candidateId>                       approved + export URL recorded → R2 bundle → ready_to_post (refuses anything not approved by a human)

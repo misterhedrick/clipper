@@ -3,7 +3,7 @@ import type { Db } from "../db/client.js";
 import { TransitionError } from "../db/transition.js";
 import { CANDIDATE_CLIP_STATUSES, POST_PLATFORMS, type CandidateClipStatus } from "../db/schema.js";
 import { InvalidConfigError, validateCampaignConfig } from "../modules/campaign-config/index.js";
-import { CandidatesError, setCaption } from "../modules/candidates/index.js";
+import { CandidatesError, rejectCandidates, setCaption } from "../modules/candidates/index.js";
 import {
   campaignDetail,
   campaignsForReview,
@@ -312,6 +312,17 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
             ${snapshot.payouts ? html`<details><summary>Payouts</summary><pre>${JSON.stringify(snapshot.payouts, null, 2)}</pre></details>` : ""}
           </div>
           ${actions}
+          ${d.waitingClips
+            ? html`<details class="card">
+                <summary>Reject all ${d.waitingClips} clip${d.waitingClips === 1 ? "" : "s"} waiting for a decision</summary>
+                <form method="post" action="/campaigns/${c.id}/reject-clips">
+                  <p>Rejects every clip of this campaign that's awaiting review or needs an edit, with one reason. They won't come back when clips are collected again. OpusClip keeps its own copies.</p>
+                  <label for="reject-reason">Why they're rejected</label>
+                  <input id="reject-reason" name="reason" required>
+                  <button class="secondary">Reject all</button>
+                </form>
+              </details>`
+            : ""}
           <details class="card">
             <summary>Delete this campaign</summary>
             <form method="post" action="/campaigns/${c.id}/delete">
@@ -366,6 +377,19 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
         return back(reply, `/campaigns/${id}`, { error: msg });
       }
       return back(reply, "/campaigns", { ok: "Campaign deleted." });
+    });
+
+    scope.post("/campaigns/:id/reject-clips", async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const path = `/campaigns/${id}`;
+      try {
+        const { count } = await rejectCandidates(ctx(req), { campaignId: id }, ((req.body ?? {}) as Form).reason ?? "");
+        return back(reply, path, { ok: `Rejected ${count} clip${count === 1 ? "" : "s"}.` });
+      } catch (err) {
+        const msg = errorMessage(err);
+        if (msg === undefined) throw err;
+        return back(reply, path, { error: msg });
+      }
     });
 
     scope.post("/campaigns/:id/request-changes", async (req, reply) => {

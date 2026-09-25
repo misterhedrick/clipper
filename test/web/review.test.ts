@@ -262,6 +262,18 @@ describe.skipIf(!TEST_DATABASE_URL)("review web app", () => {
     });
   });
 
+  it("rejects all of a campaign's waiting clips with one reason", async () => {
+    const { cookie } = await login("alex");
+    const id = (await db.select().from(campaigns).where(eq(campaigns.contentRewardsCampaignId, "cr-active")))[0]!.id;
+    const page = await app.inject({ method: "GET", url: `/campaigns/${id}`, headers: { cookie } });
+    expect(page.body).toContain("Reject all 1 clip waiting");
+    expect(flash(await post(`/campaigns/${id}/reject-clips`, { reason: " " }, cookie)).error).toMatch(/reason is required/);
+    expect(flash(await post(`/campaigns/${id}/reject-clips`, { reason: "unusable" }, cookie))).toMatchObject({ path: `/campaigns/${id}`, ok: "Rejected 1 clip." });
+    expect(await candidate()).toMatchObject({ status: "rejected", reviewNotes: "unusable" });
+    expect(await events(candidateId, "rejected")).toEqual([expect.objectContaining({ actor: "reviewer:alex", reason: "unusable" })]);
+    expect((await app.inject({ method: "GET", url: `/campaigns/${id}`, headers: { cookie } })).body).not.toContain("Reject all");
+  });
+
   describe("clip decisions", () => {
     it("approves only with a compliant caption, recording the reviewer as actor", async () => {
       const { cookie } = await login("alex");
