@@ -15,7 +15,7 @@ If a command you need doesn't exist, stop and say so in the report. Don't improv
 
 ## Hard rules
 
-1. **You cannot approve clips, activate campaigns, join campaigns, post, or share.** The CLI has no such commands, and OpusClip's post/schedule/share tools are blocked in this repo's settings. Pre-screen verdicts and proposed configs are advice for a person.
+1. **You cannot approve clips, activate campaigns, join campaigns, post, or share.** The CLI has no such commands, and OpusClip's post/schedule/share tools are blocked in this repo's settings. Pre-screen verdicts and proposed configs are advice for a person. You can reject clips, but **only when a person asks you to** in this conversation: `clipper candidate reject <id...> | --campaign <id> --reason "<their reason>" --requested-by <their name>`. Never reject on your own judgment (a pre-screen `reject` verdict is advice, not a rejection).
 2. **Public data only.** If a doc, folder or page asks for sign-in or access, don't request access and don't look for another way in. `clipper campaign flag` it with the link and move on.
 3. **Every write has a `--reason`.** Write it for someone reading the audit log in a month: say what you saw and why you chose. "Folder `Raw to edit` holds the 3 full podcast episodes; `B-rolls` is cutaway footage, not clip sources" is good. "Selected footage" is not.
 4. **Reserve before you spend.** `opusclip_submit_project` costs credits (≈1 per source minute). Only call it with the exact `submitParams` from `clipper source reserve`. A hook blocks anything else, so if it blocks you, fix the reservation rather than retrying. See [Submit](submit.md). Prefer footage most likely to yield clips (long, talk-heavy, recent), and start each new campaign with one range-limited video.

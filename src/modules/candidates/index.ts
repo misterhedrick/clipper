@@ -12,7 +12,7 @@ import {
   type PrescreenVerdict,
   type SourceJobStatus,
 } from "../../db/schema.js";
-import { recordCreated, transition } from "../../db/transition.js";
+import { isHumanActor, recordCreated, transition } from "../../db/transition.js";
 import { validateCampaignConfig, type CampaignConfig } from "../campaign-config/index.js";
 import { CAPTION_CHECK, runObjectiveChecks, validateCaption, type CaptionIssue, type CheckResults } from "../compliance/index.js";
 import { classifyStage, OpusClipParseError, parseOpusClipList, type OpusClip } from "./opusclip.js";
@@ -21,8 +21,9 @@ export { parseOpusClipList, classifyStage, OpusClipParseError } from "./opusclip
 
 // Candidate clips: what OpusClip made from a source job, from collection through
 // the operator's advisory work (pre-screen, caption, reviewer-requested edits).
-// Nothing here can approve, reject or post a clip; transition() refuses those
-// moves for any non-reviewer actor anyway.
+// Nothing here can approve or post a clip; transition() refuses those moves for
+// any non-reviewer actor anyway. Rejecting is the one exception: a reviewer can,
+// and the operator can when a named person asks for it (rejectCandidates).
 
 export type CandidatesErrorCode = "not_found" | "invalid_argument" | "invalid_state" | "conflict" | "caption_invalid";
 
@@ -331,6 +332,61 @@ export async function setCaption(ctx: CandidatesCtx, id: string, caption: string
     await audit(tx, { entityType: "candidate_clip", entityId: id, action: "set_caption", actor: ctx.actor, details: { caption: text, previous: clip.caption } });
     return { id, status: clip.status, caption: text, additionalHashtags: result.additionalHashtags, checkResults };
   });
+}
+
+const REJECTABLE: readonly CandidateClipStatus[] = ["awaiting_review", "needs_edit"];
+
+/**
+ * Rejects clips a person doesn't want: the listed ones, or every clip of a
+ * campaign still waiting on a decision (awaiting_review or needs_edit). A
+ * reviewer does it from the review page; the operator only with `requestedBy`,
+ * the person who asked. All or nothing: one listed clip that can't be rejected stops the lot.
+ */
+export async function rejectCandidates(
+  ctx: CandidatesCtx,
+  target: { ids?: string[]; campaignId?: string },
+  reason: string,
+  requestedBy?: string,
+) {
+  const why = reason.trim();
+  if (!why) throw new CandidatesError("invalid_argument", "A reason is required: say why the clips are rejected");
+  const by = requestedBy?.trim();
+  if (!isHumanActor(ctx.actor) && !by) {
+    throw new CandidatesError("invalid_argument", "Say who asked for this (--requested-by <name>): the operator rejects clips only when a person asks");
+  }
+  const ids = target.ids ?? [];
+  if (!ids.length === !target.campaignId) throw new CandidatesError("invalid_argument", "Give either candidate IDs or a campaign, not both");
+
+  const rows = await ctx.db
+    .select({ id: candidateClips.id, status: candidateClips.status })
+    .from(candidateClips)
+    .innerJoin(sourceJobs, eq(sourceJobs.id, candidateClips.sourceJobId))
+    .where(target.campaignId ? eq(sourceJobs.campaignId, target.campaignId) : inArray(candidateClips.id, ids))
+    .orderBy(asc(candidateClips.createdAt));
+  const missing = ids.filter((id) => !rows.some((r) => r.id === id));
+  if (missing.length) throw new CandidatesError("not_found", `No candidate ${missing.join(", ")}`);
+  const open = rows.filter((r) => REJECTABLE.includes(r.status));
+  if (ids.length && open.length < rows.length) {
+    const bad = rows.filter((r) => !REJECTABLE.includes(r.status)).map((r) => `${r.id} (${r.status})`);
+    throw new CandidatesError("invalid_state", `Only clips waiting on a decision (${REJECTABLE.join(" or ")}) can be rejected: ${bad.join(", ")}`);
+  }
+
+  const statusReason = by ? `${why} (requested by ${by})` : why;
+  await ctx.db.transaction(async (tx) => {
+    for (const r of open) {
+      await transition(tx, {
+        entity: "candidate_clip",
+        id: r.id,
+        to: "rejected",
+        actor: ctx.actor,
+        reason: statusReason,
+        requestedBy: by,
+        expectFrom: REJECTABLE,
+        set: { reviewNotes: why },
+      });
+    }
+  });
+  return { rejected: open.map((r) => r.id), count: open.length, reason: statusReason };
 }
 
 /**

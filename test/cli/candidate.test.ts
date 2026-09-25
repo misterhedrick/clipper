@@ -190,4 +190,31 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper candidate …", () => {
       }
     });
   });
+
+  describe("reject", () => {
+    beforeEach(async () => {
+      await upsert(fixture);
+    });
+
+    it("rejects listed clips or a campaign's waiting clips, only for a named person, recording who asked", async () => {
+      const c1 = (await clip("P123.c1")).id;
+      expect(await out("candidate", "reject", c1, "--reason", "logo")).toMatchObject({ error: { code: "usage" } });
+      expect(await out("candidate", "reject", "--reason", "logo", "--requested-by", "alex")).toMatchObject({ error: { code: "invalid_argument" } });
+
+      expect(await out("candidate", "reject", c1, "--reason", "MW4 logo", "--requested-by", "alex")).toMatchObject({ count: 1, rejected: [c1] });
+      expect(await clip("P123.c1")).toMatchObject({ status: "rejected", reviewNotes: "MW4 logo" });
+      const [ev] = await db.select().from(statusEvents).where(and(eq(statusEvents.entityId, c1), eq(statusEvents.toStatus, "rejected")));
+      expect(ev).toMatchObject({ actor: "claude-operator", reason: "MW4 logo (requested by alex)" });
+
+      // A listed clip that's already decided stops the lot.
+      const c2 = (await clip("P123.c2")).id;
+      expect(await out("candidate", "reject", c1, c2, "--reason", "x", "--requested-by", "alex")).toMatchObject({ error: { code: "invalid_state" } });
+      expect(await clip("P123.c2")).toMatchObject({ status: "awaiting_review" });
+
+      const [campaign] = await db.select({ campaignId: sourceJobs.campaignId }).from(sourceJobs).where(eq(sourceJobs.id, jobId));
+      expect(await out("candidate", "reject", "--campaign", campaign!.campaignId, "--reason", "unusable", "--requested-by", "alex")).toMatchObject({ count: 2 });
+      expect((await db.select().from(candidateClips)).map((x) => x.status)).toEqual(["rejected", "rejected", "rejected"]);
+      expect(await out("candidate", "reject", "--campaign", campaign!.campaignId, "--reason", "unusable", "--requested-by", "alex")).toMatchObject({ count: 0 });
+    });
+  });
 });

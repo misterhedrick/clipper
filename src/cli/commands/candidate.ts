@@ -2,6 +2,7 @@ import {
   listCandidates,
   prescreenCandidate,
   recordEdit,
+  rejectCandidates,
   setCaption,
   upsertCandidates,
 } from "../../modules/candidates/index.js";
@@ -9,8 +10,9 @@ import { resolveCampaign } from "../../modules/campaigns/index.js";
 import { recordExport } from "../../modules/packaging/index.js";
 import { positional, readJsonInput, readTextInput, requiredOption, type Command, type CommandContext } from "../run.js";
 
-// There is deliberately no approve / reject / needs-edit / post command here:
-// those are a reviewer's decisions, made in the review web app.
+// There is deliberately no approve / needs-edit / post command here: those are
+// a reviewer's decisions, made in the review web app. `reject` is the one
+// exception, and only for a person who asked for it by name (--requested-by).
 
 const moduleCtx = (ctx: CommandContext) => ({ db: ctx.db(), actor: ctx.actor });
 
@@ -39,6 +41,21 @@ export const candidateCommands: Record<string, Command> = {
     options: { verdict: { type: "string" }, notes: { type: "string" } },
     run: (ctx) =>
       prescreenCandidate(moduleCtx(ctx), positional(ctx, 0, "candidateId"), requiredOption(ctx, "verdict"), requiredOption(ctx, "notes")),
+  },
+  reject: {
+    summary:
+      "Reject clips a person asked to have rejected: the listed ones, or every clip of --campaign still awaiting_review / needs_edit. Only when a person asks; never on your own judgment.",
+    usage: '<candidateId...> | --campaign <id> --reason "..." --requested-by <name>',
+    options: { campaign: { type: "string" }, reason: { type: "string" }, "requested-by": { type: "string" } },
+    run: async (ctx) => {
+      const campaignId = ctx.options.campaign ? (await resolveCampaign(ctx.db(), ctx.options.campaign as string)).id : undefined;
+      return rejectCandidates(
+        moduleCtx(ctx),
+        { ids: ctx.positionals, campaignId },
+        requiredOption(ctx, "reason"),
+        requiredOption(ctx, "requested-by"),
+      );
+    },
   },
   "set-caption": {
     summary: "Store a caption draft, only if it has every required phrase, tag and disclosure and stays within the hashtag limit.",

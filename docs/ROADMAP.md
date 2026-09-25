@@ -93,7 +93,7 @@ flowchart TD
 
 **Milestone B (clips get made) is built; its live check is pending.** Reserve → submit → collect → check → pre-screen → caption → reviewer-requested edits all work against fixtures. What's left is one real 10-credit run. It's no longer blocked on code: the review page (task 11) can now activate a campaign, so it waits on you joining the campaign and OK'ing the credits (§7).
 
-**Milestone C (review and packages) is built and live.** The review page (task 11) is live; notifications and Ready-to-Post packaging (task 12) are both live and verified — a real Discord webhook, and a real R2 bucket (`clipper-bundles`) confirmed with a put/signed-URL/delete smoke test.
+**Milestone C (review and packages) is built and live.** The review page (task 11) is live, and can also delete a campaign that has no posts so it can be re-added from scratch, and reject all of a campaign's waiting clips at once (2026-09-25); Claude can reject clips too, only when you ask (`clipper candidate reject`); notifications and Ready-to-Post packaging (task 12) are both live and verified — a real Discord webhook, and a real R2 bucket (`clipper-bundles`) confirmed with a put/signed-URL/delete smoke test.
 
 ### Milestones
 

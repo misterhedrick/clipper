@@ -328,7 +328,8 @@ describe.skipIf(!TEST_DATABASE_URL)("submission protocol", () => {
         spawnSync(".claude/hooks/guard-opusclip-submit.sh", {
           input: payload(input),
           encoding: "utf8",
-          env: { ...process.env, DATABASE_URL: TEST_DATABASE_URL, CLAUDE_PROJECT_DIR: process.cwd() },
+          // No CLIPPER_OPERATOR_TOKEN: in a cloud session it would send the hook to the live review app.
+          env: { ...process.env, CLIPPER_OPERATOR_TOKEN: undefined, DATABASE_URL: TEST_DATABASE_URL, CLAUDE_PROJECT_DIR: process.cwd() },
         });
       const allowed = runHook(submitParams);
       expect(allowed.status, allowed.stderr).toBe(0);
