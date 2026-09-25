@@ -355,7 +355,7 @@ export async function rejectCandidates(
     throw new CandidatesError("invalid_argument", "Say who asked for this (--requested-by <name>): the operator rejects clips only when a person asks");
   }
   const ids = target.ids ?? [];
-  if (!ids.length === !target.campaignId) throw new CandidatesError("invalid_argument", "Give either candidate IDs or a campaign, not both");
+  if (!ids.length === !target.campaignId) throw new CandidatesError("invalid_argument", "Give candidate IDs or a campaign (exactly one of them)");
 
   const rows = await ctx.db
     .select({ id: candidateClips.id, status: candidateClips.status })
