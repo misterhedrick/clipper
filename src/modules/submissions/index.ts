@@ -252,7 +252,11 @@ export async function recordProject(ctx: SubmitCtx, jobId: string, projectId: st
   });
 }
 
-const RETRYABLE = /\b(429|502|503|504)\b|rate.?limit|too many requests|time(d)?.?out|ETIMEDOUT|ECONNRESET|temporar|try again|quota|too many users|unavailable/i;
+// OpusClip's own processing hiccup reads "We're having trouble processing your video at the
+// moment. Credits have been returned to your account." (seen 2026-09-26): no project is created
+// and nothing is charged, so it is retried like any other transient error.
+const RETRYABLE =
+  /\b(429|502|503|504)\b|rate.?limit|too many requests|time(d)?.?out|ETIMEDOUT|ECONNRESET|temporar|try again|quota|too many users|unavailable|trouble processing|at the moment|credits (have been|were) (returned|refunded)/i;
 
 export function classifyConnectorError(message: string): "retryable" | "permanent" {
   return RETRYABLE.test(message) ? "retryable" : "permanent";

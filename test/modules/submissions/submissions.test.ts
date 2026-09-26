@@ -182,6 +182,17 @@ describe.skipIf(!TEST_DATABASE_URL)("submission protocol", () => {
       expect((await ledger()).map((l) => l.status)).toEqual(["released", "released", "released"]);
     });
 
+    it("record-failure re-queues OpusClip's own processing hiccup and keeps the upload, so the retry reuses it", async () => {
+      const { jobId } = await setup();
+      await reserve(ctx(), jobId, { opusRemaining: 900, range: "0-600" });
+      const opusHiccup =
+        "Oops! We're having trouble processing your video at the moment. Credits have been returned to your account. Please don't hesitate to reach out to us for help.";
+      expect(await recordFailure(ctx(), jobId, opusHiccup)).toMatchObject({ status: "queued", classification: "retryable", retryCount: 1, creditsReleased: 10 });
+      expect(await job(jobId)).toMatchObject({ opusclipUploadId: "UPL_file-1", submitParams: null });
+      const again = await reserve(ctx(), jobId, { opusRemaining: 900, range: "0-600" });
+      expect(again.submitParams).toMatchObject({ videoUrl: "UPL_file-1", rangeStart: 0, rangeEnd: 600 });
+    });
+
     it("record-failure stops on permanent errors", async () => {
       const { jobId } = await setup();
       await reserve(ctx(), jobId, { opusRemaining: 900, range: "0-600" });
@@ -190,7 +201,14 @@ describe.skipIf(!TEST_DATABASE_URL)("submission protocol", () => {
     });
 
     it("classifies connector errors", () => {
-      for (const m of ["429", "Request timed out", "ETIMEDOUT", "Service Unavailable (503)", "Too many users have viewed this file"]) {
+      for (const m of [
+        "429",
+        "Request timed out",
+        "ETIMEDOUT",
+        "Service Unavailable (503)",
+        "Too many users have viewed this file",
+        "Oops! We're having trouble processing your video at the moment. Credits have been returned to your account. Please don't hesitate to reach out to us for help.",
+      ]) {
         expect(classifyConnectorError(m), m).toBe("retryable");
       }
       for (const m of ["Unsupported video URL", "Insufficient credits", "Video is private"]) {
