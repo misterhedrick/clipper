@@ -22,6 +22,7 @@ npm run db:generate                        # after editing src/db/schema.ts; nev
 
 ## Conventions
 
+- **Promotion is always feature branch → `develop` → `main`.** Open the feature PR against `develop`, merge it, then open a `develop` → `main` PR. Never PR or push a feature branch straight to `main`.
 - TypeScript ESM, strict. zod at every boundary with external data.
 - Each module lives in `src/modules/<name>/` and is used through its exported functions only.
 - Content Rewards parsing is reverse-engineered: keep it inside `campaign-connector`, and update `docs/API_CONTRACTS.md` when it changes.
