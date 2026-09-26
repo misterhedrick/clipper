@@ -14,6 +14,7 @@ import {
   validateSource,
   type SubmitCtx,
 } from "../../../src/modules/submissions/index.js";
+import { listAttention, notifyAttention } from "../../../src/modules/attention/index.js";
 import { resetTestDatabase, TEST_DATABASE_URL, truncateAll } from "../../helpers/db.js";
 import { validConfig } from "../../helpers/config.js";
 import { insertCampaign, insertSourceJob } from "../../helpers/fixtures.js";
@@ -221,9 +222,10 @@ describe.skipIf(!TEST_DATABASE_URL)("submission protocol", () => {
     const UPLOAD_URL = "https://storage.googleapis.com/ext.gcs.opus.pro/upload/UPL_new/video-raw.video?X-Goog-Signature=sig";
     const SESSION = "https://storage.googleapis.com/upload/session/abc";
     const KiB = 1024;
+    const QUOTA_PAGE = "<!DOCTYPE html><html><head><title>Google Drive - Quota exceeded</title></head><body>Too many users have viewed or downloaded this file recently.</body></html>";
 
     /** Fake Drive (serves `size` bytes by range) and GCS resumable upload endpoint, recording what was sent. */
-    function fakeServices(size: number, driveType = "video/mp4") {
+    function fakeServices(size: number, driveType = "video/mp4", driveHtml = "<html><title>Sign in - Google Accounts</title></html>", quotaAfterProbe = false) {
       const file = new Uint8Array(size).map((_, i) => i % 251);
       const puts: { range: string; bytes: number }[] = [];
       const received: Uint8Array[] = [];
@@ -231,8 +233,9 @@ describe.skipIf(!TEST_DATABASE_URL)("submission protocol", () => {
         const url = String(input);
         const headers = new Headers(init?.headers);
         if (url.startsWith("https://drive.usercontent.google.com/download?id=")) {
-          if (driveType.startsWith("text/html")) return new Response("<html>quota exceeded</html>", { status: 200, headers: { "content-type": driveType } });
+          if (driveType.startsWith("text/html")) return new Response(driveHtml, { status: 200, headers: { "content-type": driveType } });
           const [, a, b] = headers.get("range")!.match(/bytes=(\d+)-(\d+)/)!.map(Number);
+          if (quotaAfterProbe && b! > 0) return new Response(QUOTA_PAGE, { status: 200, headers: { "content-type": "text/html; charset=utf-8" } });
           const end = Math.min(b!, size - 1);
           return new Response(file.slice(a!, end + 1), { status: 206, headers: { "content-type": driveType, "content-range": `bytes ${a}-${end}/${size}` } });
         }
@@ -290,6 +293,39 @@ describe.skipIf(!TEST_DATABASE_URL)("submission protocol", () => {
 
       await expect(upload(fakeServices(10, "text/html; charset=utf-8").f)).rejects.toMatchObject({ code: "not_downloadable" });
       expect((await job(jobId)).opusclipUploadId).toBeNull();
+    });
+
+    it("parks the job in waiting_on_drive when Drive's download quota is exceeded, alerts once, and re-queues it after 24h", async () => {
+      const { jobId } = await setup("queued", "cr-sub", "file-1", false);
+      const t0 = new Date("2026-09-26T21:00:00Z");
+      const at = (h: number) => () => new Date(t0.getTime() + h * 3_600_000);
+      const upload = (f: typeof fetch) => uploadSource({ db, actor: "claude-operator", fetch: f, now: at(0) }, jobId, { uploadUrl: UPLOAD_URL, uploadId: "UPL_new", chunkBytes: 256 * KiB });
+
+      // Drive serves the probe, then the quota page mid-copy (what happened on 2026-09-26).
+      expect(await upload(fakeServices(600 * KiB, "video/mp4", "", true).f)).toMatchObject({
+        status: "waiting_on_drive",
+        retryAfter: "2026-09-27T21:00:00.000Z",
+        reason: expect.stringContaining("try again after 2026-09-27T21:00:00.000Z"),
+      });
+      expect(await job(jobId)).toMatchObject({ status: "waiting_on_drive", opusclipUploadId: null, statusReason: expect.stringContaining("Quota exceeded") });
+
+      // It's an attention item, announced once.
+      const { items } = await listAttention(db);
+      expect(items).toEqual([expect.objectContaining({ kind: "job_waiting_on_drive", id: jobId })]);
+      const sent: string[] = [];
+      const notify = () => notifyAttention({ db, actor: "claude-operator", send: async (m) => sent.push(m) });
+      expect(await notify()).toMatchObject({ sent: true, items: 1 });
+      expect(sent[0]).toContain("Google Drive download limit hit, try again tomorrow");
+      expect(await notify()).toMatchObject({ sent: false });
+
+      // Too early: validate leaves it waiting. After the wait: re-queued for a fresh upload.
+      expect(await validateSource(ctx({ now: at(2) }), jobId)).toMatchObject({ status: "waiting_on_drive", retryAfter: "2026-09-27T21:00:00.000Z" });
+      expect((await job(jobId)).status).toBe("waiting_on_drive");
+      expect(await validateSource(ctx({ now: at(25) }), jobId)).toMatchObject({ status: "queued", next: "upload" });
+      expect((await job(jobId)).status).toBe("queued");
+
+      // A quota page on the first probe counts the same.
+      expect(await upload(fakeServices(10, "text/html; charset=utf-8", QUOTA_PAGE).f)).toMatchObject({ status: "waiting_on_drive" });
     });
 
     it("validate re-queues a submit_failed job and drops its old upload", async () => {

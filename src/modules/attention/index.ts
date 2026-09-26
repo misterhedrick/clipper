@@ -8,14 +8,14 @@ import { auditLog, campaigns, sourceJobs, statusEvents, type EntityType } from "
 // status event it announced, so the same failure isn't re-sent on every run, but
 // a job that fails again later is.
 
-export const ATTENTION_JOB_STATUSES = ["needs_attention", "validation_failed", "submit_failed"] as const;
+export const ATTENTION_JOB_STATUSES = ["needs_attention", "validation_failed", "waiting_on_drive", "submit_failed"] as const;
 /** A config waiting this long for a person's confirmation is worth a nudge. */
 export const STALE_CONFIG_HOURS = 24;
 
 export type AttentionItem = {
   entity: Extract<EntityType, "campaign" | "source_job">;
   id: string;
-  kind: "campaign_needs_attention" | "config_waiting" | "job_needs_attention" | "job_validation_failed" | "job_submit_failed";
+  kind: "campaign_needs_attention" | "config_waiting" | "job_needs_attention" | "job_validation_failed" | "job_waiting_on_drive" | "job_submit_failed";
   status: string;
   reason: string | null;
   campaignId: string;
@@ -84,6 +84,8 @@ const describe = (i: AttentionItem, now: Date) => {
       return `• Config waiting for your confirmation${hours !== null ? ` for ${hours}h` : ""}: ${what}`;
     case "campaign_needs_attention":
       return `• Campaign needs attention: ${what}: ${i.reason ?? "no reason recorded"}`;
+    case "job_waiting_on_drive":
+      return `• Google Drive download limit hit, try again tomorrow: ${what}: ${i.reason ?? "no reason recorded"}`;
     default:
       return `• ${i.status.replace(/_/g, " ")}: ${what}: ${i.reason ?? "no reason recorded"}`;
   }

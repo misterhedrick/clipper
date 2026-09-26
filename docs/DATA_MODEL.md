@@ -64,7 +64,7 @@ type CampaignConfig = {
 | `size_bytes` | bigint | |
 | `md5_checksum` | text | |
 | `source_url` | text not null | The public Drive file URL handed to OpusClip. |
-| `status` | text not null | `detected \| validating \| validation_failed \| queued \| submitting \| submit_failed \| project_created \| processing \| candidates_ready \| needs_attention \| completed` |
+| `status` | text not null | `detected \| validating \| validation_failed \| queued \| waiting_on_drive \| submitting \| submit_failed \| project_created \| processing \| candidates_ready \| needs_attention \| completed` |
 | `status_reason` | text | Human-readable reason for the current status, required when status is a `_failed` or `needs_attention` state. |
 | `opusclip_upload_id` | text | Drive videos only: the `upload_id` from OpusClip's upload link once `source upload` has copied the file in. Submitted as `videoUrl` in place of the Drive link; cleared when a failed job is re-validated. |
 | `opusclip_project_id` | text | Set as soon as OpusClip confirms creation — before any further processing, so a crash can't orphan a created project untracked. |
@@ -132,7 +132,7 @@ Manual-posting tracking (README § "Post manually in version one").
 ## Constraints enforced in the database
 
 - Every `status` column (and `status_events.entity_type`, `posts.platform`) has a `CHECK` constraint limiting it to the values listed above, so a typo in application code fails loudly.
-- `source_jobs`: `status_reason` must be non-null when `status` is `validation_failed`, `submit_failed`, or `needs_attention`.
+- `source_jobs`: `status_reason` must be non-null when `status` is `validation_failed`, `waiting_on_drive`, `submit_failed`, or `needs_attention`. A `waiting_on_drive` job's status event carries `retryAfter` (24h after Drive refused it); `source validate` re-queues it only after that.
 
 The schema source of truth is `src/db/schema.ts` (Drizzle); migrations in `src/db/migrations/` are generated from it with `npm run db:generate`, never hand-edited.
 

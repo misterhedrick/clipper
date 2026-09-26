@@ -43,6 +43,13 @@
       "when": 1790263068114,
       "tag": "0005_dear_wild_child",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790457374219,
+      "tag": "0006_futuristic_omega_sentinel",
+      "breakpoints": true
     }
   ]
 }

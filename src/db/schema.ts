@@ -40,6 +40,8 @@ export const SOURCE_JOB_STATUSES = [
   "validating",
   "validation_failed",
   "queued",
+  // Google Drive refused the download ("Quota exceeded"): its per-file limit resets within ~24h.
+  "waiting_on_drive",
   "submitting",
   "submit_failed",
   "project_created",
@@ -206,7 +208,7 @@ export const sourceJobs = pgTable(
     check("source_jobs_skip_status_check", sql`(decision = 'skipped') = (status = 'skipped')`),
     check(
       "source_jobs_failure_reason_check",
-      sql`status not in ('validation_failed', 'submit_failed', 'needs_attention') or status_reason is not null`,
+      sql`status not in ('validation_failed', 'waiting_on_drive', 'submit_failed', 'needs_attention') or status_reason is not null`,
     ),
   ],
 );

@@ -1,6 +1,6 @@
 # Triage Needs Attention
 
-Goal: every `needs_attention`, `validation_failed` and `submit_failed` item ends the run either resolved, or turned into a clear question for a person. None sits there silently.
+Goal: every `needs_attention`, `validation_failed` and `submit_failed` item (and every `waiting_on_drive` job whose wait is over) ends the run either resolved, or turned into a clear question for a person. None sits there silently.
 
 `clipper attention list` gives each item with its reason and error details. Common cases:
 
@@ -11,6 +11,7 @@ Goal: every `needs_attention`, `validation_failed` and `submit_failed` item ends
 | `unsupported_extension`, file too large/long | Confirm the file really isn't usable. `footage skip` it with the reason so it isn't re-selected. |
 | Drive quota / "too many users" / timeout | Transient. `record-failure` already put the job back in `queued`; it gets reserved again on a later run, up to 3 tries, then lands here. Only report it once retries are exhausted. |
 | OpusClip "having trouble processing your video at the moment … credits have been returned" | OpusClip's own hiccup: no project is made and nothing is charged. `record-failure` re-queues it as transient and **keeps the upload**, so the retry doesn't re-copy the file. Reserve and submit it once more at the end of the same run; if it fails again, leave it for a later run (3 tries, then it lands here). Only report it once retries are exhausted. |
+| `waiting_on_drive` (Google Drive "Quota exceeded") | Not a failure: Google's download limit on that shared file. Once its retry time has passed, `clipper source validate <jobId>` re-queues it and you upload it as normal; before then validate just says it is still waiting. Nothing for a person to do. If the same file is refused again, it parks for another 24h; after 3 days of refusals, suggest a different episode or campaign. |
 | OpusClip rejected the URL | Check the URL form matches the kind table in `docs/ARCHITECTURE.md`. If it's a code bug, say so and include the error. Don't resubmit by hand. Once the cause is fixed (e.g. a Drive job submitted as a link before uploads existed), `clipper source validate <jobId>` re-queues it and drops any old upload; then go through [Submit](submit.md) as normal. |
 | Insufficient credits, or `reserve` refused for budget | Report it with the `clipper credits` numbers. Don't retry. |
 | Hook blocked a submit | Something differed from the reservation. Report exactly what, and don't retry with edited parameters. |
