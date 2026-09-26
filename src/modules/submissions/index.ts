@@ -1,7 +1,7 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { audit } from "../../db/audit.js";
-import { campaigns, creditLedger, sourceJobs, type FootageKind } from "../../db/schema.js";
+import { campaigns, creditLedger, sourceJobs, statusEvents, type FootageKind } from "../../db/schema.js";
 import { transition } from "../../db/transition.js";
 import { validateCampaignConfig } from "../campaign-config/index.js";
 import { estimateCredits, lockBudget, usedToday } from "../credits/index.js";
@@ -32,7 +32,19 @@ export class SubmissionError extends Error {
   }
 }
 
-export type SubmitCtx = { db: Db; actor: string; fetch?: typeof fetch; dailyBudget?: number };
+/** When a job parked in waiting_on_drive may be tried again (from its status event). */
+async function driveRetryAfter(db: Db, jobId: string): Promise<Date | null> {
+  const [ev] = await db
+    .select({ details: statusEvents.errorDetails })
+    .from(statusEvents)
+    .where(and(eq(statusEvents.entityId, jobId), eq(statusEvents.toStatus, "waiting_on_drive")))
+    .orderBy(desc(statusEvents.createdAt))
+    .limit(1);
+  const at = (ev?.details as { retryAfter?: string } | null)?.retryAfter;
+  return at ? new Date(at) : null;
+}
+
+export type SubmitCtx = { db: Db; actor: string; fetch?: typeof fetch; dailyBudget?: number; now?: () => Date };
 
 export const MAX_SUBMIT_RETRIES = 3;
 export const submitTitle = (jobId: string) => `clipper:${jobId}`;
@@ -88,26 +100,38 @@ export async function checkReachable(kind: FootageKind, url: string, fetchImpl: 
 /**
  * Checks a selected video can be submitted: campaign confirmed + active, source
  * publicly reachable. Also re-queues a submit_failed job once its cause is fixed;
- * that drops any earlier OpusClip upload so the video is uploaded afresh.
+ * that drops any earlier OpusClip upload so the video is uploaded afresh. A job
+ * waiting on Google Drive's download limit is re-queued only once its wait is over.
  */
 export async function validateSource(ctx: SubmitCtx, jobId: string) {
   const { job, campaign } = await loadJob(ctx.db, jobId);
   if (job.decision !== "selected") throw new SubmissionError("invalid_state", `Job ${jobId} was skipped, not selected`);
-  if (!["detected", "validation_failed", "submit_failed", "queued"].includes(job.status)) {
-    throw new SubmissionError("invalid_state", `Job ${jobId} is ${job.status}; only detected/validation_failed/submit_failed jobs are validated`);
+  if (!["detected", "validation_failed", "waiting_on_drive", "submit_failed", "queued"].includes(job.status)) {
+    throw new SubmissionError("invalid_state", `Job ${jobId} is ${job.status}; only detected/validation_failed/waiting_on_drive/submit_failed jobs are validated`);
   }
   requireActiveCampaign(campaign);
   if (job.status === "queued") return { id: job.id, status: "queued" as const, alreadyValid: true };
+  if (job.status === "waiting_on_drive") {
+    const retryAfter = await driveRetryAfter(ctx.db, job.id);
+    if (retryAfter && retryAfter > (ctx.now?.() ?? new Date())) {
+      return { id: job.id, status: "waiting_on_drive" as const, retryAfter: retryAfter.toISOString(), reason: job.statusReason };
+    }
+  }
 
   const check = await checkReachable(job.sourceKind, job.sourceUrl, ctx.fetch);
   if (check.reachable) {
     const retry = job.status === "submit_failed";
+    const driveWaitOver = job.status === "waiting_on_drive";
     await transition(ctx.db, {
       entity: "source_job",
       id: job.id,
       to: "queued",
       actor: ctx.actor,
-      reason: retry ? `source re-validated after submit failure (${job.statusReason ?? "no reason recorded"})` : "source validated",
+      reason: retry
+        ? `source re-validated after submit failure (${job.statusReason ?? "no reason recorded"})`
+        : driveWaitOver
+          ? "Google Drive wait is over; retrying the upload"
+          : "source validated",
       ...(retry ? { set: { opusclipUploadId: null } } : {}),
     });
     return { id: job.id, status: "queued" as const, check, ...(needsUpload(job.sourceKind) ? { next: "upload" as const } : {}) };

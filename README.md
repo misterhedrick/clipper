@@ -313,6 +313,7 @@ detected
 validating
 validation_failed
 queued
+waiting_on_drive      # Google Drive "Quota exceeded"; retried after 24h
 submitting            # handing videoUrl to OpusClip
 submit_failed
 project_created

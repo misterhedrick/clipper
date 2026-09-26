@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { audit } from "../../db/audit.js";
 import { campaigns, sourceJobs, type FootageKind } from "../../db/schema.js";
+import { transition } from "../../db/transition.js";
 
 // OpusClip's API refuses Google Drive links ("Unsupported video link"), so Drive
 // videos go in through its upload link instead: the operator gets a signed
@@ -10,7 +11,7 @@ import { campaigns, sourceJobs, type FootageKind } from "../../db/schema.js";
 // storing nothing. The job then submits the upload ID in place of the Drive link
 // (buildSubmitParams), so reserve → submit → guard work as before.
 
-export type UploadErrorCode = "not_found" | "invalid_state" | "invalid_argument" | "not_downloadable" | "upload_failed";
+export type UploadErrorCode = "not_found" | "invalid_state" | "invalid_argument" | "not_downloadable" | "upload_failed" | "drive_quota";
 
 export class UploadError extends Error {
   constructor(
@@ -22,7 +23,16 @@ export class UploadError extends Error {
   }
 }
 
-export type UploadCtx = { db: Db; actor: string; fetch?: typeof fetch };
+export type UploadCtx = { db: Db; actor: string; fetch?: typeof fetch; now?: () => Date };
+
+/**
+ * Google caps downloads of a shared Drive file per day and then serves a
+ * "Google Drive - Quota exceeded" page instead of the video. Busy campaign
+ * folders hit it; it clears within about a day, so the job waits and is
+ * retried rather than failed.
+ */
+export const DRIVE_QUOTA_RETRY_HOURS = 24;
+const DRIVE_QUOTA = /quota exceeded/i;
 export type UploadInput = { uploadUrl: string; uploadId: string; chunkBytes?: number };
 
 /** Footage kinds OpusClip won't fetch by URL, which `source upload` must copy in first. */
@@ -77,8 +87,9 @@ async function driveFileSize(doFetch: typeof fetch, fileId: string): Promise<num
   } catch (err) {
     throw new UploadError("upload_failed", `Couldn't reach Drive for file ${fileId}: ${(err as Error).message}`);
   }
-  await res.arrayBuffer().catch(() => undefined);
   const type = res.headers.get("content-type") ?? "";
+  const body = type.startsWith("text/html") ? await res.text().catch(() => "") : (await res.arrayBuffer().catch(() => undefined), "");
+  if (DRIVE_QUOTA.test(body)) throw new UploadError("drive_quota", `Google Drive refused file ${fileId}: download quota exceeded`);
   const total = Number(res.headers.get("content-range")?.match(/\/(\d+)$/)?.[1]);
   if (res.status !== 206 || type.startsWith("text/html") || !Number.isInteger(total) || total <= 0) {
     throw new UploadError(
@@ -116,6 +127,28 @@ export async function uploadSource(ctx: UploadCtx, jobId: string, input: UploadI
   const fileId = job.sourceKey.replace(/^gdrive:/, "");
 
   const doFetch = ctx.fetch ?? fetch;
+  try {
+    return await copyToOpusClip(ctx, doFetch, job.id, fileId, uploadUrl, uploadId, chunk);
+  } catch (err) {
+    const quota = err instanceof UploadError && (err.code === "drive_quota" || (err.code === "upload_failed" && err.message.startsWith("Downloading bytes") && DRIVE_QUOTA.test(err.message)));
+    if (!quota) throw err;
+    // Not a failure to triage: the job waits for Drive's limit to reset and is
+    // retried by a later run (`source validate` re-queues it once the wait is over).
+    const retryAfter = new Date((ctx.now?.() ?? new Date()).getTime() + DRIVE_QUOTA_RETRY_HOURS * 3_600_000);
+    const reason = `Google Drive download limit reached ("Quota exceeded"); try again after ${retryAfter.toISOString()}`;
+    await transition(ctx.db, {
+      entity: "source_job",
+      id: job.id,
+      to: "waiting_on_drive",
+      actor: ctx.actor,
+      reason,
+      errorDetails: { error: (err as Error).message, retryAfter: retryAfter.toISOString() },
+    });
+    return { id: job.id, status: "waiting_on_drive" as const, retryAfter: retryAfter.toISOString(), reason };
+  }
+}
+
+async function copyToOpusClip(ctx: UploadCtx, doFetch: typeof fetch, jobId: string, fileId: string, uploadUrl: string, uploadId: string, chunk: number) {
   const started = Date.now();
   const total = await driveFileSize(doFetch, fileId);
   const session = await request(doFetch, "Starting the OpusClip upload", uploadUrl, { method: "POST", headers: { "x-goog-resumable": "start" }, body: "" }, (s) => s === 200 || s === 201);
@@ -141,8 +174,8 @@ export async function uploadSource(ctx: UploadCtx, jobId: string, input: UploadI
 
   const seconds = Math.round((Date.now() - started) / 1000);
   await ctx.db.transaction(async (tx) => {
-    await tx.update(sourceJobs).set({ opusclipUploadId: uploadId, sizeBytes: total, updatedAt: new Date() }).where(eq(sourceJobs.id, job.id));
-    await audit(tx, { entityType: "source_job", entityId: job.id, action: "upload", actor: ctx.actor, details: { uploadId, bytes: total, seconds } });
+    await tx.update(sourceJobs).set({ opusclipUploadId: uploadId, sizeBytes: total, updatedAt: new Date() }).where(eq(sourceJobs.id, jobId));
+    await audit(tx, { entityType: "source_job", entityId: jobId, action: "upload", actor: ctx.actor, details: { uploadId, bytes: total, seconds } });
   });
-  return { id: job.id, uploadId, bytes: total, seconds };
+  return { id: jobId, uploadId, bytes: total, seconds };
 }
