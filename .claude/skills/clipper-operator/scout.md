@@ -12,11 +12,12 @@ Goal: recommend campaigns worth running through this pipeline. A person decides 
    - **unclear**: the rules sit behind a page you can't read, or there's no brief.
 4. For LF campaigns, check fit:
    - Is footage on a host OpusClip can ingest? Drive, YouTube, Dropbox, Frame.io, Loom, Vimeo, Twitch, or Content Rewards uploads. Kick, MediaSilo or a custom site means a person must source it: say so.
+   - **Footage host matters for reliability.** YouTube, Content Rewards uploads, Vimeo and Frame.io are fetched by OpusClip itself and never stall. Google Drive has to be copied through our server, and busy campaign folders hit Google's daily download limit ("Quota exceeded"), which delays that campaign by a day at a time. Drive campaigns are still fine to recommend (most campaigns use Drive), but: when two campaigns are otherwise close, rank the non-Drive one higher; and if no `active` campaign has non-Drive footage, recommend at least one that does (if any fits), so a blocked Drive folder never leaves the pipeline with nothing to submit.
    - Payout per 1K views and max per clip. Budget remaining is `budgetCents` against spend where visible.
    - **Logo, watermark or overlay required → skip it.** If the brief asks for a logo, watermark, brand overlay, CTA graphic or overlay pack on the video, it's not a fit: those need an OpusClip brand template, which can only be edited on a desktop, and this pipeline is run from a phone. Don't recommend it; mention it in one line as skipped for that reason. Text the clipper writes (a hook, a caption) is fine.
    - Requirements this setup can't meet: dedicated page, audience tier, a new account, an application.
    - Rules that would cause most OpusClip output to be rejected, e.g. "gameplay must appear in the first 4 seconds" or heavy editing requirements.
-5. Recommend at most five, ranked, one line each: *why it fits, what it needs from a person (join / apply / dedicated page), the expected footage host*. Include the Content Rewards URL.
+5. Recommend at most five, ranked, one line each: *why it fits, what it needs from a person (join / apply / dedicated page), the expected footage host (say "Drive: can hit Google's download limit" for Drive)*. Include the Content Rewards URL.
 6. Don't `campaign add` anything during scouting unless the person asked you to. Adding is their call.
 
 When a person says "add these", run `clipper campaign add <url>` for each, then `clipper campaign classify <id> --type ... --reason ...`.
