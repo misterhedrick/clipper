@@ -1,0 +1,4 @@
+ALTER TABLE "source_jobs" DROP CONSTRAINT "source_jobs_status_check";--> statement-breakpoint
+ALTER TABLE "source_jobs" DROP CONSTRAINT "source_jobs_failure_reason_check";--> statement-breakpoint
+ALTER TABLE "source_jobs" ADD CONSTRAINT "source_jobs_status_check" CHECK (status in ('detected', 'skipped', 'validating', 'validation_failed', 'queued', 'waiting_on_drive', 'submitting', 'submit_failed', 'project_created', 'processing', 'candidates_ready', 'needs_attention', 'completed'));--> statement-breakpoint
+ALTER TABLE "source_jobs" ADD CONSTRAINT "source_jobs_failure_reason_check" CHECK (status not in ('validation_failed', 'waiting_on_drive', 'submit_failed', 'needs_attention') or status_reason is not null);
