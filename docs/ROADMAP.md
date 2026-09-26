@@ -154,6 +154,7 @@ The **live database (Supabase)** holds one campaign as of 2026-09-24: **Charlie 
 - **Video length is unknown** before submitting, so credits are held at a 90-minute estimate unless a range or length is given. `credits reconcile` corrects the ledger from OpusClip's real usage.
 - **No automated posting.** It's out of scope for v1 by design.
 - **OpusClip brand templates are made by hand.** The API can only list them. The account's **default template is kept clean** (no logo) and serves every campaign; campaigns that require a logo aren't taken on. The default used to carry the MW4 logo, which put it on the first Charlie Berens clips (2026-09-24). Since 2026-09-26 the only template is `Default-Template` (`cmu2pvwct0456z090u3hcdq02`).
+- **OpusClip sometimes refuses a submit with "having trouble processing your video at the moment"** and returns the credits (first seen 2026-09-26 on Ryan Zofay). It's treated as transient: the job re-queues with its upload kept, up to 3 tries.
 - **OpusClip returns a `_bonus` copy of its top clip** (same content, `is_bonus: true`). It comes in as its own candidate; pre-screen holds it as a duplicate.
 - **Free hosting sleeps.** The review page (Render free) takes ~30–60 s to wake after idling, and a Supabase free project pauses after ~7 days without activity. With manual-only runs, nothing keeps it awake: use it at least weekly, or restore it from the dashboard.
 - **Manual only means nothing moves on its own.** Clips OpusClip finishes, and clips you approve, wait until you start the next operator run.
