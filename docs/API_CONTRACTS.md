@@ -118,7 +118,7 @@ Use option 1. Each returned file's `id` is the `drive_file_id` used for dedupe i
 
 ## OpusClip connector (MCP): how the operator uses OpusClip
 
-Verified 2026-09-22 on the connected account: plan **PRO**, `has_api_access: true`, monthly cap **900 credits** (`enforced: false`, so our ledger is the real limit), **10** concurrent projects. Brand templates: `Preset template 1` (default, portrait) and `MW4` (portrait). No social accounts connected.
+Verified 2026-09-22 on the connected account: plan **PRO**, `has_api_access: true`, monthly cap **900 credits** (`enforced: false`, so our ledger is the real limit), **10** concurrent projects. Brand templates (updated 2026-09-26): only `Default-Template` (`cmu2pvwct0456z090u3hcdq02`; default, portrait, `word-level_karaoke_fill-pop` captions, no logo). `Preset template 1` and `MW4` were deleted. No social accounts connected.
 
 Tools the operator uses (names as exposed in Claude Code: `mcp__OpusClip__<tool>`):
 
