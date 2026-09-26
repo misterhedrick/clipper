@@ -119,7 +119,7 @@ flowchart TD
 | MW4 (Call of Duty) | `pending_confirmation` | Real caption rules drafted. **Footage is on MediaSilo, which OpusClip can't read**, and the campaign is paused on Content Rewards. |
 | Charlie Berens | `discovered`, classified long-form | Drive folder registered; one full special selected. **Best first real test.** |
 
-The **live database (Supabase)** holds one campaign as of 2026-09-24: **Charlie Berens**, `active` (config confirmed by `reviewer:Daniel`). Its Drive folder is registered and both full specials are selected. The first submission as a Drive link was rejected (OpusClip doesn't accept Drive links), so the Drive upload step was built; with it, a 10-minute slice of *Neighborly* (job `547c34b5`) was uploaded and submitted on 2026-09-24 as OpusClip project `P3092415v0K3` (10 credits, captions on). *Midwest Goodbye* is held until that test is judged.
+The **live database (Supabase)** holds one campaign as of 2026-09-24: **Charlie Berens**, `active` (config confirmed by `reviewer:Daniel`). Its Drive folder is registered and both full specials are selected. The first submission as a Drive link was rejected (OpusClip doesn't accept Drive links), so the Drive upload step was built; with it, a 10-minute slice of *Neighborly* (job `547c34b5`) was uploaded and submitted on 2026-09-24 as OpusClip project `P3092415v0K3` (10 credits, captions on). *Midwest Goodbye* is held until that test is judged. On 2026-09-26 that project was deleted in OpusClip (its clips carried the MW4 logo and were all rejected); the next Charlie Berens submission uses the clean `Default-Template`.
 
 ## 6. What's next
 
@@ -137,7 +137,7 @@ The **live database (Supabase)** holds one campaign as of 2026-09-24: **Charlie 
 | When | What |
 |---|---|
 | ~~Before the first real test~~ | ✅ done 2026-09-24: joined the Charlie Berens campaign and OK'd ~10 credits for a 10-minute slice |
-| ~~Now~~ | ✅ done 2026-09-26: the OpusClip account now has one template, `Default-Template` (default, portrait, karaoke captions, no logo); `Preset template 1` and `MW4` were removed. Still yours: in the OpusClip editor, remove the MW4 logo from the first-batch Charlie Berens clips you want to post. |
+| ~~Now~~ | ✅ done 2026-09-26: the OpusClip account now has one template, `Default-Template` (default, portrait, karaoke captions, no logo); `Preset template 1` and `MW4` were removed. The first-batch Charlie Berens project (`P3092415v0K3`, MW4 logo on every clip) was deleted in OpusClip the same day; its 15 clips were already rejected, so none will be exported. |
 | ~~Before the first real test~~ | ✅ done 2026-09-23: a Cloudflare R2 bucket (`clipper-bundles`) with a bucket-scoped Account API token is set on Render (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`), verified with a live put/signed-URL/delete test. |
 | ~~Before running the operator from a cloud session~~ | ✅ done 2026-09-23: `CLIPPER_OPERATOR_TOKEN` is in the Claude cloud environment (checked with a live `clipper attention list`). |
 | ~~A Slack or Discord incoming-webhook URL~~ | ✅ done 2026-09-23: a Discord webhook is set as `NOTIFY_WEBHOOK_URL` on Render (`clipper-review`), verified with a live `clipper notify` test message delivered to Discord. |
