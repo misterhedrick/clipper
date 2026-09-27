@@ -153,6 +153,21 @@ export function page(opts: { title: string; reviewer?: string; flash?: { ok?: st
   .verdict { border-left: 4px solid var(--line); background: var(--bg); border-radius: 6px; padding: 10px 12px; margin: 10px 0 0; font-size: 14px; }
   .verdict.ok { border-color: var(--ok); } .verdict.bad { border-color: var(--bad); } .verdict.warn { border-color: var(--warn); }
   .verdict.ok, .verdict.bad, .verdict.warn { color: var(--fg); background: var(--bg); }
+  /* Review queue: each clip is one compact row that expands to its checks and notes. */
+  details.qitem { background: var(--card); padding: 0; margin: 8px 0; }
+  details.qitem > summary { list-style: none; display: flex; gap: 12px; align-items: center; padding: 10px 12px; color: var(--fg); font-weight: normal; }
+  details.qitem > summary::-webkit-details-marker { display: none; }
+  details.qitem > summary::after { content: "▾"; margin-left: auto; flex: none; color: var(--muted, #888); transition: transform .2s; }
+  details.qitem[open] > summary::after { transform: rotate(180deg); }
+  details.qitem > summary:hover { color: var(--fg); background: var(--bg); border-radius: 8px; }
+  .qthumb { width: 40px; height: 71px; flex: none; object-fit: cover; border-radius: 4px; background: var(--bg); }
+  .qmain { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .qtitle { font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+  .qmeta { font-size: 13px; overflow-wrap: anywhere; }
+  .qtags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .qtags .badge { margin: 0; font-size: .72rem; padding: 2px 8px; }
+  .qbody { padding: 0 12px 12px; border-top: 1px solid var(--line); }
+  a.button { display: inline-block; padding: 9px 14px; border-radius: 6px; background: linear-gradient(135deg, var(--accent), var(--accent-dark)); color: #fff; font-weight: 600; text-decoration: none; font-size: 14px; }
   details { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin: 10px 0; }
   @media (min-width: 640px) { details { border-radius: 8px; padding: 14px; } }
   summary { cursor: pointer; font-weight: 600; color: var(--accent); user-select: none; }
