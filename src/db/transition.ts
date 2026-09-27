@@ -110,11 +110,14 @@ const onPersonsRequest: { [E in EntityType]: readonly StatusOf[E][] } = {
 export const STANDING_RULES = {
   /** A clip with a recorded failed check that the operator's own pre-screen also rejects (decided 2026-09-27). */
   reject_failed_checks: "standing rule: failed checks + pre-screen reject",
+  /** A config the operator verified against the campaign page and brief, every field matching (decided 2026-09-27). */
+  activate_verified_config: "standing rule: config self-verified against the campaign page and brief",
 } as const;
 export type StandingRule = keyof typeof STANDING_RULES;
 
 const byStandingRule: { [R in StandingRule]: { entity: EntityType; to: string } } = {
   reject_failed_checks: { entity: "candidate_clip", to: "rejected" },
+  activate_verified_config: { entity: "campaign", to: "active" },
 };
 
 /** Human actors are recorded as `reviewer:<identity>`. Anything else is automation. */

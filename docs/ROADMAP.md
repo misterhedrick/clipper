@@ -25,8 +25,8 @@ So the design became **code for guarantees, Claude for judgment, people for deci
 | Who | Does what | How |
 |---|---|---|
 | **Code** | Anything that must be exact or safe: the database, dedupe, credit budget, caption rule checks, the approval gate, the audit log | The `clipper` CLI + Postgres |
-| **Claude** | Reading and deciding: scouting campaigns, turning briefs into configs, picking footage, pre-screening clips, drafting captions, triaging problems | A Claude Code session **you start** ("do an operator run"), following the playbook in [`.claude/skills/clipper-operator/`](../.claude/skills/clipper-operator/SKILL.md), acting only through the CLI and the **OpusClip connector** |
-| **You** | Joining campaigns, confirming each campaign's config once, approving clips, posting | Content Rewards, and the review web page |
+| **Claude** | Reading and deciding: scouting campaigns, turning briefs into configs and verifying them against the source before activating, picking footage, looking at every clip, fixing what an edit can fix, pre-screening, drafting captions, rejecting clips with failed checks, triaging problems | A Claude Code session **you start** ("do an operator run"), following the playbook in [`.claude/skills/clipper-operator/`](../.claude/skills/clipper-operator/SKILL.md), acting only through the CLI and the **OpusClip connector** |
+| **You** | Joining campaigns (Discord tells you which), approving clips, posting; stepping in when Claude flags something it can't settle | Content Rewards, and the review web page |
 
 OpusClip is reached through its **connector** (MCP, Pro plan) from Claude's session rather than an API client in our code. The connector also gives Claude transcripts for pre-screening and tools to fix clips a reviewer sends back.
 
@@ -34,14 +34,18 @@ OpusClip is reached through its **connector** (MCP, Pro plan) from Claude's sess
 
 ```mermaid
 flowchart TD
-  A["Claude: scout Content Rewards<br/>(clipper campaign scout + brief)"] --> B{"You: join the campaigns you want"}
-  B --> C["Claude: read the brief, draft the config<br/>(campaign brief → propose-config)"]
-  C --> D{"You: confirm the config once<br/>(review page)"}
-  D --> E["Claude: find footage, select/skip each video with a reason<br/>(footage list-url → select / skip)"]
+  A["Claude: scout Content Rewards<br/>(clipper campaign scout + brief)"] --> C["Claude: read the brief, draft the config<br/>(campaign brief → propose-config)"]
+  C --> V["Claude: re-read page + brief, check every field<br/>(campaign verify-config; correct and re-check, ≤3 rounds)"]
+  V -->|all match| AC["Claude: activate (campaign activate)<br/>Discord: you join it on Content Rewards"]
+  V -->|unsettled / still wrong| X{"Discord: you settle it"}
+  AC --> E["Claude: find footage, select/skip each video with a reason<br/>(footage list-url → select / skip)"]
   E --> F["Code: validate + reserve credits<br/>(source validate → reserve)"]
   F --> G["Claude: submit to OpusClip via connector<br/>(hook blocks anything unreserved)"]
-  G --> H["Claude: collect clips; code runs checks<br/>(opusclip_list_clips → candidate upsert)"]
-  H --> I["Claude: pre-screen from transcripts, draft captions<br/>(code verifies required phrases/tags/#Ad)"]
+  G --> H["Claude: collect clips; code checks duration<br/>(opusclip_list_clips → candidate upsert)"]
+  H --> VR["Claude: look at every clip's frames, record each check with evidence<br/>(candidate frames → visual-review)"]
+  VR -->|fixable fail| FX["Claude: fix it in OpusClip, then look again<br/>(edit hook: fixing ops, ≤2 per clip)"]
+  FX --> VR
+  VR --> I["Claude: verdict + caption (code verifies caption rules);<br/>clips with a failed check + reject verdict are removed (reject-failed)"]
   I --> J{"You: approve / needs edit / reject<br/>(review page)"}
   J -->|approve| K["Claude: export HD; code packages to Ready to Post"]
   J -->|needs edit| L["Claude: apply your requested fix via connector → back to you"]
@@ -85,6 +89,7 @@ flowchart TD
 | 9 | Collect clips from OpusClip + objective checks (`candidate upsert`) | ✅ **live** 2026-09-24: 15 real clips upserted unchanged (fields `clip_id`, `duration_sec`, `preview_url`, `is_bonus`, `stage: COMPLETE`); parser narrowed to the observed shape 2026-09-27, which also started keeping the judge sub-scores (sent as `hook_score` etc.) |
 | 10 | Caption validation + pre-screen + reviewer-requested edits | ✅ |
 | 10b | Visual review: Claude looks at every clip's frames and records each check with evidence before recommending | ✅ 2026-09-27 |
+| 10c | Self-verified campaign activation: Claude checks its config against the campaign page and brief, activates, and pings you to join | ✅ 2026-09-27 |
 | 11 | Review web page (confirm configs, approve clips, record posts) | ✅ |
 | 12 | Ready-to-Post packaging to R2 + notifications | ✅ code · notifications ✅ live · R2 bucket ✅ live and verified |
 | 13 | Deploy: Render web (free) + Supabase Postgres (free) + on-demand operator runs | ✅ review page **live**; operator remote mode **live and verified from a cloud session**; Discord notifications **live and verified** 2026-09-23; manual empty-queue run done 2026-09-23 (report: "Needs you: nothing") |
@@ -143,7 +148,7 @@ The **live database (Supabase)** holds one campaign as of 2026-09-24: **Charlie 
 | ~~A Slack or Discord incoming-webhook URL~~ | ✅ done 2026-09-23: a Discord webhook is set as `NOTIFY_WEBHOOK_URL` on Render (`clipper-review`), verified with a live `clipper notify` test message delivered to Discord. |
 | About once a week | Start any operator run, or open the review page, so the free Supabase database doesn't pause after ~7 idle days. If it does pause, restore it from the Supabase dashboard. |
 
-**Decided:** the operator rejects clips on its own only under one standing rule (2026-09-27): a recorded failed check (duration, or a visual-review `fail` with evidence) **and** its own pre-screen `reject`, via `clipper candidate reject-failed` each run. Taste-only rejects and held clips stay with you, and there's no undo: rejects are final. It also fixes what an edit can fix on its own (2026-09-27): a failed check like a misspelled caption word gets an OpusClip edit (guarded by a hook: fixing ops only, at most 2 per clip), and the fixed clip is looked at again before any verdict. Only campaigns that **don't require a logo, watermark or overlay** are taken on (2026-09-25): those need an OpusClip brand template, which can only be edited on a desktop, and the pipeline is run from a phone. Scouting skips them, onboarding flags them, and the config validator rejects any overlay requirement. Every decision handed to you comes with Claude's recommendation (what usually performs best), and every notification links the review page (2026-09-24). Operator runs are **manual only**: no scheduled Routine (2026-09-23). Daily OpusClip budget **120 credits** (≈2 h of footage/day; set on Render as `OPUSCLIP_DAILY_CREDIT_BUDGET`, 2026-09-23). The month's 900 credits could go in ~7 days at that rate; the reserve step also refuses anything over OpusClip's remaining monthly credits.
+**Decided:** the operator activates campaigns itself (2026-09-27): after drafting the config it re-reads the campaign page and brief, checks every field with evidence, corrects and re-checks (up to 3 rounds), and activates only when everything matches. Anything it can't settle, a brief it can't read, a logo/overlay requirement, or still wrong after 3 rounds goes to you on Discord instead. Joining stays yours: Discord tells you to join each campaign it activates, and clipping starts right away. The operator rejects clips on its own only under one standing rule (2026-09-27): a recorded failed check (duration, or a visual-review `fail` with evidence) **and** its own pre-screen `reject`, via `clipper candidate reject-failed` each run. Taste-only rejects and held clips stay with you, and there's no undo: rejects are final. It also fixes what an edit can fix on its own (2026-09-27): a failed check like a misspelled caption word gets an OpusClip edit (guarded by a hook: fixing ops only, at most 2 per clip), and the fixed clip is looked at again before any verdict. Only campaigns that **don't require a logo, watermark or overlay** are taken on (2026-09-25): those need an OpusClip brand template, which can only be edited on a desktop, and the pipeline is run from a phone. Scouting skips them, onboarding flags them, and the config validator rejects any overlay requirement. Every decision handed to you comes with Claude's recommendation (what usually performs best), and every notification links the review page (2026-09-24). Operator runs are **manual only**: no scheduled Routine (2026-09-23). Daily OpusClip budget **120 credits** (≈2 h of footage/day; set on Render as `OPUSCLIP_DAILY_CREDIT_BUDGET`, 2026-09-23). The month's 900 credits could go in ~7 days at that rate; the reserve step also refuses anything over OpusClip's remaining monthly credits.
 
 ## 8. Known limits (v1)
 

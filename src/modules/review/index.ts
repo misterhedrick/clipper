@@ -65,7 +65,8 @@ async function loadCandidate(db: Db, id: string) {
 
 /**
  * Confirms a drafted config, possibly edited by the reviewer, and activates the
- * campaign. This is the only way a campaign becomes active.
+ * campaign. The other way a campaign becomes active is the operator's
+ * self-verified standing rule (`activateVerifiedCampaign` in campaigns).
  */
 export async function confirmCampaign(ctx: ReviewCtx, id: string, configInput: unknown) {
   requireHuman(ctx);
