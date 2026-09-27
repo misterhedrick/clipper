@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { count, desc, eq, inArray } from "drizzle-orm";
+import { z } from "zod";
 import type { Db } from "../../db/client.js";
 import { audit } from "../../db/audit.js";
 import {
@@ -10,8 +12,9 @@ import {
   sourceJobs,
   type CampaignStatus,
   type CampaignType,
+  type ConfigVerificationRound,
 } from "../../db/schema.js";
-import { recordCreated, transition } from "../../db/transition.js";
+import { OPERATOR_ACTOR, recordCreated, STANDING_RULES, transition } from "../../db/transition.js";
 import {
   fetchCampaign,
   fetchDiscoverListing,
@@ -20,7 +23,7 @@ import {
   type ListedCampaign,
 } from "../campaign-connector/index.js";
 import { parseGoogleDocUrl, readGoogleDoc, type ReaderDeps } from "../brief-reader/index.js";
-import { validateCampaignConfig } from "../campaign-config/index.js";
+import { CONFIG_FIELDS, validateCampaignConfig, type CampaignConfig } from "../campaign-config/index.js";
 
 export class CampaignsError extends Error {
   constructor(
@@ -284,9 +287,11 @@ async function briefSource(ctx: Ctx, ref: string) {
 const PROPOSABLE_FROM = ["discovered", "requirements_drafted", "pending_confirmation", "needs_attention"] as const;
 
 /**
- * Validates Claude's draft config and parks it for a person to confirm
- * (status → pending_confirmation). This can never activate a campaign: only a
- * reviewer's confirmation in the web app can, and transition() enforces that.
+ * Validates Claude's draft config and parks it (status → pending_confirmation)
+ * until it's verified (`verifyConfig` → `activateVerifiedCampaign`) or a
+ * reviewer confirms it in the web app. Proposing never activates anything.
+ * A correction during verification (from pending_confirmation) keeps the
+ * verification rounds so far; a fresh draft from any other status starts over.
  */
 export async function proposeConfig(ctx: Ctx, ref: string, input: unknown, opts: { dryRun?: boolean } = {}) {
   const config = validateCampaignConfig(input);
@@ -319,10 +324,15 @@ export async function proposeConfig(ctx: Ctx, ref: string, input: unknown, opts:
       id: c.id,
       to: "pending_confirmation",
       actor: ctx.actor,
-      reason: "config proposed; awaiting human confirmation",
+      reason: c.status === "pending_confirmation" ? "config corrected; awaiting verification" : "config proposed; awaiting verification",
       expectFrom: PROPOSABLE_FROM,
       // A new draft voids any earlier confirmation.
-      set: { config, configConfirmedAt: null, configConfirmedBy: null },
+      set: {
+        config,
+        configConfirmedAt: null,
+        configConfirmedBy: null,
+        ...(c.status === "pending_confirmation" ? {} : { configVerification: null }),
+      },
     });
     await audit(tx, {
       entityType: "campaign",
@@ -333,4 +343,152 @@ export async function proposeConfig(ctx: Ctx, ref: string, input: unknown, opts:
     });
   });
   return { id: c.id, status: "pending_confirmation" as const, ...summary };
+}
+
+// --- self-verified activation (standing rule, 2026-09-27) ------------------------------
+
+/** Correct-and-recheck rounds before a config that still doesn't match goes to a person. */
+export const MAX_CONFIG_ROUNDS = 3;
+
+/** Marks a config the operator activated itself, in `config_confirmed_by`. */
+export const SELF_VERIFIED_BY = `${OPERATOR_ACTOR} (self-verified)`;
+
+/** Stable hash of a config: jsonb reorders keys, so hash a key-sorted rendering. */
+export function configHash(config: unknown): string {
+  const stable = (v: unknown): unknown =>
+    Array.isArray(v)
+      ? v.map(stable)
+      : v && typeof v === "object"
+        ? Object.fromEntries(Object.keys(v as object).sort().map((k) => [k, stable((v as Record<string, unknown>)[k])]))
+        : v;
+  return createHash("sha256").update(JSON.stringify(stable(config))).digest("hex");
+}
+
+const fieldResult = z.strictObject({ result: z.enum(["match", "mismatch", "unsettled"]), evidence: z.string().trim().min(1) });
+const verificationSchema = z.strictObject({
+  /** Where the operator re-read the rules: the campaign page and every brief doc. */
+  sources: z.array(z.string().trim().min(1)).min(1),
+  summary: z.string().trim().min(1),
+  fields: z.record(z.string(), fieldResult),
+  /** Rules on the page or in the brief that the config doesn't capture anywhere. */
+  missedRules: z.array(z.string().trim().min(1)).default([]),
+});
+
+/**
+ * Records one round of the operator comparing its drafted config with the
+ * campaign page and brief: every config field gets match / mismatch / unsettled
+ * with evidence, plus any rule the config misses. Outcome:
+ * - every field matches and nothing is missed → verified (then `campaign activate`);
+ * - something doesn't match → needs_changes: correct it with `propose-config` and
+ *   verify again, up to MAX_CONFIG_ROUNDS; after that the campaign is flagged;
+ * - a field can't be settled from the page or brief → the campaign is flagged now.
+ * A flag lands in the attention digest, so a person hears about it on Discord.
+ */
+export async function verifyConfig(ctx: Ctx, ref: string, input: unknown) {
+  const parsed = verificationSchema.safeParse(input);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0]!;
+    throw new CampaignsError("invalid_argument", `Verification: ${issue.path.join(".") || "(root)"}: ${issue.message}`);
+  }
+  const v = parsed.data;
+  const c = await resolveCampaign(ctx.db, ref);
+  if (c.status !== "pending_confirmation") {
+    throw new CampaignsError("invalid_state", `Campaign is ${c.status}; only a proposed config (pending_confirmation) is verified`);
+  }
+  const config = validateCampaignConfig(c.config);
+  const given = Object.keys(v.fields);
+  const missing = CONFIG_FIELDS.filter((f) => !given.includes(f));
+  const unknown = given.filter((f) => !(CONFIG_FIELDS as readonly string[]).includes(f));
+  if (missing.length || unknown.length) {
+    throw new CampaignsError(
+      "invalid_argument",
+      [missing.length ? `missing fields: ${missing.join(", ")}` : "", unknown.length ? `unknown fields: ${unknown.join(", ")}` : ""].filter(Boolean).join("; "),
+    );
+  }
+  const rounds = c.configVerification?.rounds ?? [];
+  if (rounds.length >= MAX_CONFIG_ROUNDS) {
+    throw new CampaignsError("invalid_state", `Already ${rounds.length} verification rounds; the campaign needs a person`);
+  }
+  const unsettled = Object.entries(v.fields).filter(([, f]) => f.result === "unsettled");
+  const mismatched = Object.entries(v.fields).filter(([, f]) => f.result === "mismatch");
+  const outcome: ConfigVerificationRound["outcome"] = unsettled.length
+    ? "unsettled"
+    : mismatched.length || v.missedRules.length
+      ? "needs_changes"
+      : "verified";
+  const round: ConfigVerificationRound = {
+    round: rounds.length + 1,
+    at: new Date().toISOString(),
+    actor: ctx.actor,
+    configHash: configHash(config),
+    outcome,
+    summary: v.summary,
+    sources: v.sources,
+    fields: v.fields,
+    missedRules: v.missedRules,
+  };
+  const describeList = (list: [string, { evidence: string }][]) => list.map(([f, r]) => `${f} (${r.evidence})`).join("; ");
+  let flagReason: string | null = null;
+  if (outcome === "unsettled") flagReason = `Can't settle from the campaign page or brief: ${describeList(unsettled)}`;
+  else if (outcome === "needs_changes" && round.round >= MAX_CONFIG_ROUNDS) {
+    flagReason = `Config still doesn't match the brief after ${round.round} rounds: ${[describeList(mismatched), ...v.missedRules.map((r) => `missed rule: ${r}`)].filter(Boolean).join("; ")}`;
+  }
+
+  await ctx.db.transaction(async (tx) => {
+    await tx.update(campaigns).set({ configVerification: { rounds: [...rounds, round] } }).where(eq(campaigns.id, c.id));
+    await audit(tx, { entityType: "campaign", entityId: c.id, action: "verify_config", actor: ctx.actor, details: round });
+    if (flagReason) {
+      await transition(tx, { entity: "campaign", id: c.id, to: "needs_attention", actor: ctx.actor, reason: flagReason, expectFrom: ["pending_confirmation"] });
+    }
+  });
+  return {
+    id: c.id,
+    round: round.round,
+    outcome,
+    status: flagReason ? ("needs_attention" as const) : c.status,
+    flagged: flagReason,
+    mismatched: mismatched.map(([f]) => f),
+    unsettled: unsettled.map(([f]) => f),
+    missedRules: v.missedRules,
+    roundsLeft: MAX_CONFIG_ROUNDS - round.round,
+  };
+}
+
+/**
+ * Standing rule (2026-09-27): the operator activates a campaign whose current
+ * config its own latest verification round found fully matching the campaign
+ * page and brief. Only long-form campaigns, only from pending_confirmation, and
+ * only for the exact config verified (an edit since needs a new round). The
+ * person still joins the campaign on Content Rewards; the attention digest tells them to.
+ */
+export async function activateVerifiedCampaign(ctx: Ctx, ref: string) {
+  const c = await resolveCampaign(ctx.db, ref);
+  if (c.status !== "pending_confirmation") throw new CampaignsError("invalid_state", `Campaign is ${c.status}; only pending_confirmation campaigns are activated`);
+  if (c.campaignType !== "lf") throw new CampaignsError("invalid_state", `Campaign type is ${c.campaignType ?? "unclassified"}; only long-form (lf) campaigns are clipped`);
+  const config: CampaignConfig = validateCampaignConfig(c.config);
+  if (config.extraction.unresolvedFields.length) {
+    throw new CampaignsError("invalid_state", `Unresolved fields: ${config.extraction.unresolvedFields.join(", ")}; settle them or flag the campaign`);
+  }
+  const last = c.configVerification?.rounds.at(-1);
+  if (!last || last.outcome !== "verified") {
+    throw new CampaignsError("invalid_state", `The config isn't verified${last ? ` (last round: ${last.outcome})` : ""}; run \`campaign verify-config\` first`);
+  }
+  if (last.configHash !== configHash(config)) {
+    throw new CampaignsError("invalid_state", "The config changed after it was verified; verify it again");
+  }
+  const at = new Date();
+  await ctx.db.transaction(async (tx) => {
+    await transition(tx, {
+      entity: "campaign",
+      id: c.id,
+      to: "active",
+      actor: ctx.actor,
+      reason: `${STANDING_RULES.activate_verified_config} (round ${last.round})`,
+      standingRule: "activate_verified_config",
+      expectFrom: ["pending_confirmation"],
+      set: { configConfirmedAt: at, configConfirmedBy: SELF_VERIFIED_BY },
+    });
+    await audit(tx, { entityType: "campaign", entityId: c.id, action: "activate_verified", actor: ctx.actor, details: { round: last.round, configHash: last.configHash } });
+  });
+  return { id: c.id, status: "active" as const, round: last.round, joinUrl: c.contentRewardsUrl };
 }

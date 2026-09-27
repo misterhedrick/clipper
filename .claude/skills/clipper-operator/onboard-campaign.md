@@ -1,6 +1,6 @@
-# Onboard a campaign (brief → proposed config)
+# Onboard a campaign (brief → verified config → active)
 
-Goal: turn a freeform brief into a validated campaign config for a person to confirm once. Applies to campaigns in `discovered` that are classified `lf`.
+Goal: turn a freeform brief into a campaign config, check it against the campaign page and brief until it's right, and activate the campaign yourself (standing rule, 2026-09-27). A person is only pulled in when something can't be settled. Applies to campaigns in `discovered` that are classified `lf`.
 
 ## 1. Read everything the brief points to
 
@@ -46,6 +46,32 @@ Every field needs an entry in `extraction.fieldConfidence` or in `extraction.unr
 
 ## 3. Propose it
 
-First `clipper campaign propose-config <id> --file config.json --dry-run`. It returns every problem at once, each with its field path (`invalid_config` → `issues[]`); fix and repeat. Then run it without `--dry-run`. The campaign moves to `pending_confirmation` for a person to confirm. You're done; activation happens in the web app, and nothing you can run will activate it. The campaign must be classified `lf` first.
+First `clipper campaign propose-config <id> --file config.json --dry-run`. It returns every problem at once, each with its field path (`invalid_config` → `issues[]`); fix and repeat. Then run it without `--dry-run`. The campaign moves to `pending_confirmation`. The campaign must be classified `lf` first.
 
 If the brief is too thin to draft anything useful, `clipper campaign flag <id> --reason "..."` with the specific questions instead.
+
+## 4. Verify it against the source, then activate
+
+Check your own draft as if someone else wrote it. Re-read the sources fresh (`clipper campaign show <id>` for the campaign page and its reference materials, `clipper campaign brief <id>` plus every linked sub-doc), not your memory of them, and compare field by field:
+
+- **match**: the config says what the page or brief says, or, where they're silent, holds a sensible recommended value you can justify (quote the justification). Evidence quotes the source: `"Brief: 'clips 15–60 seconds'"`, or `"Brief silent on length; 15–60s fits TikTok/Reels/Shorts and leaves time to show the home"`.
+- **mismatch**: the config contradicts the source, or misses part of it. Say what the source says.
+- **unsettled**: you can't tell what's right, even with a recommendation: the brief is ambiguous or contradicts itself, or a value only the campaign owner knows (a tracking link, an account to tag that isn't named).
+
+Also list every rule on the page or in the brief that the config doesn't capture anywhere (not in a field, `review.requiredChecks` or `extraction.unexpressedRules`) as a `missedRules` entry.
+
+`clipper campaign verify-config <id> --file verification.json` with
+```json
+{"sources": ["<campaign page URL>", "<brief doc URL>", "..."],
+ "summary": "what you compared and what you found",
+ "fields": {"<every config field>": {"result": "match|mismatch|unsettled", "evidence": "..."}},
+ "missedRules": []}
+```
+It must cover every config field (`clipGeneration.*` and `requirements.*`). The outcome decides the next step:
+- `verified` → `clipper campaign activate <id>`. The campaign goes live and footage sourcing and submitting start in this same run. The attention digest tells the person to join it on Content Rewards; there's nothing else to ask them.
+- `needs_changes` → fix exactly what the round found, `propose-config` again, and verify again (a new round, with the sources re-read). You get 3 rounds; a third round that still doesn't match flags the campaign for a person automatically.
+- `unsettled` → the campaign is flagged for a person automatically, with your evidence as the reason.
+
+`activate` refuses a config with unresolved fields, one that changed after it was verified, or one whose last round didn't verify. Don't mark a field `match` you didn't actually check: the evidence is what the person reads if something goes wrong.
+
+A brief that needs sign-in, or a campaign that requires a logo or overlay, is flagged as before, never activated.

@@ -6,6 +6,8 @@ import { createDb, type Db } from "../../src/db/client.js";
 import { auditLog, campaigns, statusEvents } from "../../src/db/schema.js";
 import { resetTestDatabase, TEST_DATABASE_URL, truncateAll } from "../helpers/db.js";
 import { validConfig } from "../helpers/config.js";
+import { CONFIG_FIELDS } from "../../src/modules/campaign-config/index.js";
+import { notifyAttention } from "../../src/modules/attention/index.js";
 
 const MW4 = "24ad920b-d24f-479e-9cef-f22182e4a0c0";
 const campaignPage = readFileSync(new URL("../fixtures/content-rewards-campaign-page.html", import.meta.url), "utf8");
@@ -214,12 +216,83 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper campaign …", () => {
       expect((await row()).status).toBe("discovered");
     });
 
-    it("never activates, and refuses to overwrite an active campaign's config", async () => {
+    it("proposing never activates, and refuses to overwrite an active campaign's config", async () => {
       await cli("campaign", "classify", MW4, "--type", "lf", "--reason", "footage clipping");
       await propose(validConfig());
       expect((await row()).status).toBe("pending_confirmation");
       await db.update(campaigns).set({ status: "active" }); // as if a reviewer confirmed
       expect((await propose(validConfig())).output).toMatchObject({ error: { code: "invalid_state" } });
+    });
+
+    describe("self-verified activation", () => {
+      // Every field settled (a template set), as activation requires.
+      const settled = () => {
+        const c = validConfig();
+        c.clipGeneration.brandTemplateId = "tmpl-1";
+        c.extraction.unresolvedFields = [];
+        c.extraction.fieldConfidence["clipGeneration.brandTemplateId"] = "high";
+        return c;
+      };
+      const allMatch = () => Object.fromEntries(CONFIG_FIELDS.map((f) => [f, { result: "match", evidence: `brief states ${f}` }]));
+      const verify = (fields: Record<string, unknown>, missedRules: string[] = []) => {
+        stdinText = JSON.stringify({ sources: [`https://contentrewards.com/discover/${MW4}`, "https://docs.google.com/document/d/x"], summary: "checked", fields, missedRules });
+        return cli("campaign", "verify-config", MW4, "--file", "-");
+      };
+      beforeEach(async () => {
+        await cli("campaign", "classify", MW4, "--type", "lf", "--reason", "footage clipping");
+        await propose(settled());
+      });
+
+      it("activates only a config its latest round verified, then pings the person to join once", async () => {
+        expect((await cli("campaign", "activate", MW4)).output).toMatchObject({ error: { code: "invalid_state", message: expect.stringContaining("isn't verified") } });
+        expect((await verify({ ...allMatch(), bogus: { result: "match", evidence: "x" } })).output).toMatchObject({ error: { code: "invalid_argument", message: expect.stringContaining("unknown fields: bogus") } });
+        const partial = allMatch();
+        delete partial["requirements.requiredTags"];
+        expect((await verify(partial)).output).toMatchObject({ error: { message: expect.stringContaining("missing fields: requirements.requiredTags") } });
+
+        expect((await verify(allMatch())).output).toMatchObject({ round: 1, outcome: "verified", status: "pending_confirmation" });
+        const res = await cli("campaign", "activate", MW4);
+        expect(res.output).toMatchObject({ status: "active", round: 1, joinUrl: expect.stringContaining(MW4) });
+        expect(await row()).toMatchObject({ status: "active", configConfirmedBy: "claude-operator (self-verified)" });
+        const events = await db.select().from(statusEvents).where(eq(statusEvents.toStatus, "active"));
+        expect(events[0]).toMatchObject({ actor: "claude-operator", reason: expect.stringContaining("standing rule: config self-verified") });
+
+        const sent: string[] = [];
+        await notifyAttention({ db, actor: "claude-operator", send: async (m) => void sent.push(m) });
+        await notifyAttention({ db, actor: "claude-operator", send: async (m) => void sent.push(m) });
+        expect(sent).toHaveLength(1);
+        expect(sent[0]).toMatch(/Live and clipping: join it on Content Rewards/);
+        expect(sent[0]).toContain(MW4);
+      });
+
+      it("refuses a config changed after verification", async () => {
+        await verify(allMatch());
+        const c = settled();
+        c.requirements.maxAdditionalHashtags = 5;
+        await propose(c); // a correction keeps the rounds but not the verified hash
+        expect((await cli("campaign", "activate", MW4)).output).toMatchObject({ error: { message: expect.stringContaining("changed after it was verified") } });
+      });
+
+      it("a mismatch means correct and re-verify; after 3 failed rounds the campaign goes to a person", async () => {
+        const wrong = { ...allMatch(), "clipGeneration.maxDurationSeconds": { result: "mismatch", evidence: "brief says max 45s" } };
+        expect((await verify(wrong)).output).toMatchObject({ round: 1, outcome: "needs_changes", status: "pending_confirmation", roundsLeft: 2 });
+        expect((await verify(allMatch(), ["no swearing"])).output).toMatchObject({ round: 2, outcome: "needs_changes", missedRules: ["no swearing"] });
+        expect((await verify(wrong)).output).toMatchObject({ round: 3, status: "needs_attention", flagged: expect.stringContaining("after 3 rounds") });
+        expect(await row()).toMatchObject({ status: "needs_attention", statusReason: expect.stringContaining("brief says max 45s") });
+        expect((await cli("campaign", "activate", MW4)).output).toMatchObject({ error: { code: "invalid_state" } });
+      });
+
+      it("a field it can't settle flags the campaign straight away", async () => {
+        const res = await verify({ ...allMatch(), "requirements.requiredTags": { result: "unsettled", evidence: "brief says 'tag us' but names no account" } });
+        expect(res.output).toMatchObject({ round: 1, outcome: "unsettled", status: "needs_attention", unsettled: ["requirements.requiredTags"] });
+        expect((await row()).statusReason).toMatch(/Can't settle.*names no account/);
+      });
+
+      it("won't activate a config with unresolved fields, and the rule unlocks nothing else", async () => {
+        await propose(validConfig()); // brandTemplateId unresolved
+        await verify(allMatch());
+        expect((await cli("campaign", "activate", MW4)).output).toMatchObject({ error: { message: expect.stringContaining("Unresolved fields") } });
+      });
     });
 
     it("reports unreadable or non-JSON input as a usage error", async () => {
@@ -255,9 +328,9 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper campaign …", () => {
     expect(res.output).toMatchObject({ allow: false });
   });
 
-  it("has no command that can activate a campaign or approve a clip", async () => {
+  it("has no command that can approve a clip, join or post; activating only under the verified-config rule", async () => {
     const help = (await cli("help")).output as { commands: Record<string, unknown> };
-    for (const name of Object.keys(help.commands)) {
+    for (const name of Object.keys(help.commands).filter((n) => n !== "campaign activate")) {
       expect(name).not.toMatch(/approve|activate|confirm|post|publish|join/);
     }
     await cli("campaign", "add", `https://contentrewards.com/discover/${MW4}`);

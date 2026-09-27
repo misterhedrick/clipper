@@ -1,4 +1,5 @@
 import {
+  activateVerifiedCampaign,
   addCampaign,
   classifyCampaign,
   flagCampaign,
@@ -7,6 +8,7 @@ import {
   readCampaignBrief,
   scoutCampaigns,
   showCampaign,
+  verifyConfig,
 } from "../../modules/campaigns/index.js";
 import { positional, readJsonInput, requiredOption, type Command, type CommandContext } from "../run.js";
 
@@ -54,13 +56,27 @@ export const campaignCommands: Record<string, Command> = {
       classifyCampaign(moduleCtx(ctx), positional(ctx, 0, "id"), requiredOption(ctx, "type"), requiredOption(ctx, "reason")),
   },
   "propose-config": {
-    summary: "Validate a drafted config and park it for a person to confirm (→ pending_confirmation). --dry-run only validates.",
+    summary:
+      "Validate a drafted (or corrected) config and park it for verification (→ pending_confirmation). --dry-run only validates. Never activates.",
     usage: "<id> --file <config.json | -> [--dry-run]",
     options: { file: { type: "string" }, "dry-run": { type: "boolean" } },
     run: async (ctx) =>
       proposeConfig(moduleCtx(ctx), positional(ctx, 0, "id"), await readJsonInput(ctx, requiredOption(ctx, "file")), {
         dryRun: ctx.options["dry-run"] === true,
       }),
+  },
+  "verify-config": {
+    summary:
+      "Record one round of checking the proposed config against the campaign page and brief: every config field match | mismatch | unsettled with evidence, plus missed rules. Unsettled, or still mismatched after 3 rounds, flags the campaign for a person.",
+    usage: "<id> --file <verification.json | ->   ({sources, summary, fields: {<field>: {result, evidence}}, missedRules})",
+    options: { file: { type: "string" } },
+    run: async (ctx) => verifyConfig(moduleCtx(ctx), positional(ctx, 0, "id"), await readJsonInput(ctx, requiredOption(ctx, "file"))),
+  },
+  activate: {
+    summary:
+      "Standing rule: activate a campaign whose current config your latest verify-config round found fully matching. Returns the Content Rewards link the person must join.",
+    usage: "<id>",
+    run: (ctx) => activateVerifiedCampaign(moduleCtx(ctx), positional(ctx, 0, "id")),
   },
   flag: {
     summary: "Move a campaign to needs_attention so a person looks at it.",

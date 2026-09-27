@@ -106,6 +106,24 @@ export type CheckOutcome = (typeof CHECK_OUTCOMES)[number];
 export type ClipEdit = { ops: unknown[]; reason: string; at: string; fixes?: string[] };
 
 /**
+ * One round of the operator checking its own drafted config against the
+ * campaign page and brief (`campaign verify-config`). `configHash` pins the
+ * exact config it checked, so a later edit can't ride on an old verification.
+ */
+export type ConfigVerificationRound = {
+  round: number;
+  at: string;
+  actor: string;
+  configHash: string;
+  outcome: "verified" | "needs_changes" | "unsettled";
+  summary: string;
+  sources: string[];
+  fields: Record<string, { result: "match" | "mismatch" | "unsettled"; evidence: string }>;
+  missedRules: string[];
+};
+export type ConfigVerification = { rounds: ConfigVerificationRound[] };
+
+/**
  * The operator's look at a clip's frames (`candidate visual-review`): one result
  * with evidence per check that the clip data alone can't settle. `edits` is how
  * many edits the clip had when it was reviewed; an edit makes the review stale.
@@ -153,6 +171,7 @@ export const campaigns = pgTable(
     config: jsonb("config").$type<Partial<CampaignConfig>>().notNull().default({}),
     configConfirmedAt: timestamp("config_confirmed_at", { withTimezone: true }),
     configConfirmedBy: text("config_confirmed_by"),
+    configVerification: jsonb("config_verification").$type<ConfigVerification>(),
   },
   (t) => [
     check("campaigns_status_check", inList("status", CAMPAIGN_STATUSES)),
