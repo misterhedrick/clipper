@@ -1,36 +1,52 @@
 {
-  "project_id": "P123",
-  "stage": "COMPLETE",
   "clips": [
     {
+      "project_id": "P123",
       "clip_id": "P123.c1",
       "rank": 1,
+      "score": 92,
       "title": "The one-shot nobody saw coming",
       "description": "Clutch final round",
       "hashtags": ["#mw4", "#cod"],
-      "duration_ms": 32000,
-      "score": 92,
-      "sub_scores": { "hook": 9.1, "coherence": 8.4, "connection": 7.9, "trend": 6.5 },
-      "preview_url": "https://cdn.opus.pro/P123/c1/preview.mp4",
-      "thumbnail_url": "https://cdn.opus.pro/P123/c1/thumb.jpg",
-      "aspect_ratio": "9:16"
+      "duration_sec": 32,
+      "is_bonus": false,
+      "preview_url": "https://signed-ext.cdn.opus.pro/media/org_x/user_x/P123/c.P123.c1/VIDEO_PREVIEW_-0-31800.mp4?v=1&hdnts=URLPrefix=x~Expires=1~Signature=x",
+      "thumbnail_url": "https://signed-ext.cdn.opus.pro/media/org_x/user_x/P123/c.P123.c1/thumbnail.jpg?v=1&hdnts=URLPrefix=x~Expires=1~Signature=x",
+      "hook_score": 9,
+      "coherence_score": 8,
+      "connection_score": 10,
+      "trend_score": 7
     },
     {
+      "project_id": "P123",
       "clip_id": "P123.c2",
-      "rank": 2,
-      "title": "Landscape by mistake",
-      "hashtags": "#mw4",
-      "duration_ms": 28000,
-      "score": 81,
-      "preview_url": "https://cdn.opus.pro/P123/c2/preview.mp4",
-      "aspect_ratio": "16:9"
+      "rank": 1,
+      "score": 92,
+      "title": "The one-shot nobody saw coming",
+      "description": "Clutch final round",
+      "hashtags": ["#mw4", "#cod"],
+      "duration_sec": 32,
+      "is_bonus": true,
+      "preview_url": "https://signed-ext.cdn.opus.pro/media/org_x/user_x/P123/c.P123.c2/VIDEO_PREVIEW_-0-31800.mp4?v=1&hdnts=URLPrefix=x~Expires=1~Signature=x",
+      "thumbnail_url": "https://signed-ext.cdn.opus.pro/media/org_x/user_x/P123/c.P123.c2/thumbnail.jpg?v=1&hdnts=URLPrefix=x~Expires=1~Signature=x",
+      "hook_score": 9,
+      "coherence_score": 8,
+      "connection_score": 10,
+      "trend_score": 7
     },
     {
+      "project_id": "P123",
       "clip_id": "P123.c3",
-      "rank": 3,
+      "rank": 2,
+      "score": 70,
       "title": "Too short",
-      "duration_ms": 9000,
-      "score": 70
+      "description": "",
+      "hashtags": [],
+      "duration_sec": 9,
+      "is_bonus": false,
+      "preview_url": "https://signed-ext.cdn.opus.pro/media/org_x/user_x/P123/c.P123.c3/VIDEO_PREVIEW_-0-9000.mp4?v=1&hdnts=URLPrefix=x~Expires=1~Signature=x"
     }
-  ]
+  ],
+  "total": 3,
+  "stage": "COMPLETE"
 }
