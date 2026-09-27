@@ -58,8 +58,8 @@ export async function prepareArgv(argv: string[]): Promise<{ argv: string[]; std
     if (++files > 1) throw new Error("Only one file argument per command");
     if (value === "-") needsStdin = true;
     else {
-      stdin = await readFile(value, "utf8").catch(() => {
-        throw new Error(`Can't read ${name} ${value}`);
+      stdin = await readFile(value, "utf8").catch((err) => {
+        throw new Error(`Can't read ${name} ${value}: ${(err as Error).message}`);
       });
     }
     out[valueIndex] = eq ? `${name}=-` : "-";
