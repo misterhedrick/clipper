@@ -426,21 +426,36 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
             const rank = (v: string) => (v === "fail" ? 0 : v === "pass" ? 2 : 1);
             const checks = Object.entries(clip.checkResults ?? {}).sort(([, a], [, b]) => rank(a) - rank(b));
             const passed = checks.filter(([, v]) => v === "pass").length;
+            const failed = checks.filter(([, v]) => v === "fail").length;
+            const toCheck = checks.length - passed - failed;
             const thumb = safeUrl(clip.thumbnailUrl);
             const verdict = clip.prescreenVerdict;
             const tone = verdict === "recommend" ? "ok" : verdict === "reject" ? "bad" : verdict ? "warn" : "";
-            return html`<div class="card clip">
-              <a class="clip-thumb" href="/candidates/${clip.id}">${thumb ? html`<img src="${thumb}" alt="">` : html`<span class="muted">no thumbnail</span>`}</a>
-              <div>
-                <div class="clip-head">
-                  <h2><a href="/candidates/${clip.id}">${clip.title ?? clip.opusclipClipId}</a></h2>
-                  ${verdict ? html`<span class="badge ${tone}">${verdict}</span>` : ""}
-                </div>
-                <p class="muted clip-meta">${campaign.title} · ${job.sourceName ?? job.sourceKey} · ${seconds(clip.durationMs)} · score ${clip.opusclipScore ?? "?"}${checks.length ? html` · ${passed}/${checks.length} checks pass` : ""}</p>
+            // One badge summing up the checks, so a closed row still says what needs a look.
+            const tally = !checks.length
+              ? ""
+              : failed
+                ? html`<span class="badge bad">${failed} failed</span>`
+                : toCheck
+                  ? html`<span class="badge warn">${toCheck} to check</span>`
+                  : html`<span class="badge ok">all pass</span>`;
+            // Collapsed to one row so a long queue fits on a screen; tap to see checks and notes.
+            return html`<details class="card qitem">
+              <summary>
+                ${thumb ? html`<img class="qthumb" src="${thumb}" alt="">` : html`<span class="qthumb muted"></span>`}
+                <span class="qmain">
+                  <span class="qtitle">${clip.title ?? clip.opusclipClipId}</span>
+                  <span class="muted qmeta">${seconds(clip.durationMs)} · score ${clip.opusclipScore ?? "?"} · ${campaign.title}</span>
+                  <span class="qtags">${verdict ? html`<span class="badge ${tone}">${verdict}</span>` : html`<span class="badge">not pre-screened</span>`}${tally}</span>
+                </span>
+              </summary>
+              <div class="qbody">
+                <p class="muted clip-meta">${job.sourceName ?? job.sourceKey}${checks.length ? html` · ${passed}/${checks.length} checks pass` : ""}</p>
                 ${checks.length ? html`<ul class="checks">${checks.map(([k, v]) => html`<li>${badge(v)}<span>${k.replace(/_/g, " ")}</span></li>`)}</ul>` : ""}
                 ${verdict ? html`<p class="verdict ${tone}"><strong>Operator:</strong> ${clip.prescreenNotes ?? ""}</p>` : html`<p class="muted">Not pre-screened yet.</p>`}
+                <p class="actions"><a class="button" href="/candidates/${clip.id}">Open clip to review →</a></p>
               </div>
-            </div>`;
+            </details>`;
           })}`,
       );
     });
