@@ -46,7 +46,7 @@ const fail = (code: string, message: string, exitCode = 1): RunResult => ({ exit
 export async function prepareArgv(argv: string[]): Promise<{ argv: string[]; stdin?: string; needsStdin: boolean }> {
   const out = [...argv];
   let stdin: string | undefined;
-  let needsStdin = argv[0] === "guard" && argv[1] === "submit";
+  let needsStdin = argv[0] === "guard" && (argv[1] === "submit" || argv[1] === "edit");
   let files = 0;
   for (let i = 0; i < out.length; i++) {
     const arg = out[i]!;

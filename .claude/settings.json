@@ -22,6 +22,15 @@
         ]
       },
       {
+        "matcher": "mcp__OpusClip__opusclip_edit_clip",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-opusclip-edit.sh"
+          }
+        ]
+      },
+      {
         "matcher": "mcp__Render__.*",
         "hooks": [
           {

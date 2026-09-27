@@ -102,7 +102,8 @@ export type PostPlatform = (typeof POST_PLATFORMS)[number];
 export const CHECK_OUTCOMES = ["pass", "fail", "manual_review_required"] as const;
 export type CheckOutcome = (typeof CHECK_OUTCOMES)[number];
 
-export type ClipEdit = { ops: unknown[]; reason: string; at: string };
+/** `fixes`: the failed checks an automatic fix targeted (absent when a reviewer asked for the edit). */
+export type ClipEdit = { ops: unknown[]; reason: string; at: string; fixes?: string[] };
 
 /**
  * The operator's look at a clip's frames (`candidate visual-review`): one result

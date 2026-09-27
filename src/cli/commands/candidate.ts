@@ -146,15 +146,17 @@ export const candidateCommands: Record<string, Command> = {
     run: (ctx) => recordExport(moduleCtx(ctx), positional(ctx, 0, "candidateId"), requiredOption(ctx, "url")),
   },
   "record-edit": {
-    summary: "Log an opusclip_edit_clip call made for a reviewer's needs_edit request; the candidate returns to awaiting_review.",
-    usage: '<candidateId> --ops-file <ops.json | -> --reason "<reviewer note → what you changed>"',
-    options: { "ops-file": { type: "string" }, reason: { type: "string" } },
+    summary:
+      "Log an opusclip_edit_clip call: for a reviewer's needs_edit request (→ awaiting_review), or with --fixes as an automatic fix of failed checks (stays awaiting_review; visual review and pre-screen start over).",
+    usage: '<candidateId> --ops-file <ops.json | -> --reason "<what was wrong → what you changed>" [--fixes <check,check>]',
+    options: { "ops-file": { type: "string" }, reason: { type: "string" }, fixes: { type: "string" } },
     run: async (ctx) =>
       recordEdit(
         moduleCtx(ctx),
         positional(ctx, 0, "candidateId"),
         await readJsonInput(ctx, requiredOption(ctx, "ops-file")),
         requiredOption(ctx, "reason"),
+        typeof ctx.options.fixes === "string" ? ctx.options.fixes.split(",").map((s) => s.trim()).filter(Boolean) : [],
       ),
   },
 };

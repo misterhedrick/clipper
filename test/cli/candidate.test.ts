@@ -307,6 +307,69 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper candidate …", () => {
       expect(await clip("P123.c1")).toMatchObject({ status: "awaiting_review" });
     });
 
+    it("guard edit allows dry runs, a reviewer's needs_edit, and fixing a failed check with fixing ops only", async () => {
+      const guard = async (tool_input: Record<string, unknown>) => {
+        stdin = JSON.stringify({ tool_input: { projectId: "P123", clipId: "P123.c1", ...tool_input } });
+        return cli("guard", "edit");
+      };
+      const fix = [{ op: "replace_phrase", phrase: "Boxable", replacement: "Boxabl" }];
+      expect((await guard({ ops: [], dryRun: true })).exitCode).toBe(0);
+      // No failed check yet: nothing to fix.
+      expect(await guard({ ops: fix })).toMatchObject({ exitCode: 2, output: { allow: false, reason: expect.stringContaining("no failed check") } });
+
+      stdin = review(allPass);
+      await out("candidate", "visual-review", id, "--file", "-");
+      expect(await guard({ ops: fix })).toMatchObject({ exitCode: 0, output: { allow: true, candidateId: id } });
+      expect(await guard({ ops: [...fix, { op: "add_text_overlay", text: "BOXABL" }] })).toMatchObject({
+        exitCode: 2,
+        output: { reason: expect.stringContaining("add_text_overlay aren't allowed") },
+      });
+      expect(await guard({ ops: [{ op: "set_captions", enabled: false }] })).toMatchObject({ exitCode: 2 });
+      expect(await guard({ projectId: "OTHER", ops: fix })).toMatchObject({ exitCode: 2 });
+      expect(await guard({ clipId: "nope", ops: fix })).toMatchObject({ exitCode: 2 });
+      stdin = "not json";
+      expect((await cli("guard", "edit")).exitCode).toBe(2);
+
+      // A reviewer's needs_edit allows any edit they asked for.
+      await transition(db, { entity: "candidate_clip", id, to: "needs_edit", actor: "reviewer:test", reason: "add an outro card" });
+      expect((await guard({ ops: [{ op: "add_text_overlay", text: "Link in bio" }] })).exitCode).toBe(0);
+    });
+
+    it("record-edit --fixes logs an automatic fix: the clip stays in review, and is looked at and pre-screened afresh", async () => {
+      const ops = JSON.stringify([{ op: "replace_phrase", phrase: "Boxable", replacement: "Boxabl" }]);
+      const fixIt = (fixes: string) => {
+        stdin = ops;
+        return out("candidate", "record-edit", id, "--ops-file", "-", "--reason", "captions misspelled the brand → replace_phrase", "--fixes", fixes);
+      };
+      stdin = ops;
+      expect(await out("candidate", "record-edit", id, "--ops-file", "-", "--reason", "x")).toMatchObject({ error: { code: "invalid_state", message: expect.stringContaining("--fixes") } });
+
+      stdin = review(allPass);
+      await out("candidate", "visual-review", id, "--file", "-");
+      await out("candidate", "prescreen", id, "--verdict", "reject", "--notes", "watermark");
+      expect(await fixIt("aspect_ratio")).toMatchObject({ error: { code: "invalid_argument", message: expect.stringContaining("didn't fail: aspect_ratio") } });
+
+      expect(await fixIt("no_other_brand_watermarks")).toMatchObject({ status: "awaiting_review", autoFixes: 1, edit: { fixes: ["no_other_brand_watermarks"] } });
+      expect(await clip("P123.c1")).toMatchObject({
+        status: "awaiting_review",
+        visualReview: null,
+        prescreenVerdict: null,
+        checkResults: { no_other_brand_watermarks: "manual_review_required", aspect_ratio: "manual_review_required" },
+        editLog: [{ fixes: ["no_other_brand_watermarks"] }],
+      });
+      expect(await db.select().from(auditLog).where(eq(auditLog.action, "auto_fix"))).toHaveLength(1);
+      // With the fail gone, the reject rule leaves it alone until it's looked at again.
+      expect(await out("candidate", "reject-failed")).toMatchObject({ count: 0 });
+
+      // A second fix is allowed; a third isn't.
+      stdin = review(allPass);
+      await out("candidate", "visual-review", id, "--file", "-");
+      expect(await fixIt("no_other_brand_watermarks")).toMatchObject({ autoFixes: 2 });
+      stdin = review(allPass);
+      await out("candidate", "visual-review", id, "--file", "-");
+      expect(await fixIt("no_other_brand_watermarks")).toMatchObject({ error: { code: "invalid_state", message: expect.stringContaining("already had 2 automatic fixes") } });
+    });
+
     it("frames never runs over the operator endpoint", async () => {
       const res = await run(["candidate", "frames", id], { db, remote: true });
       expect(res.output).toMatchObject({ error: { code: "usage", message: expect.stringContaining("operator's machine") } });
