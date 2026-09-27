@@ -462,6 +462,8 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
       const poster = safeUrl(clip.thumbnailUrl);
       const checks = Object.entries(clip.checkResults ?? {});
       const anyFail = checks.some(([k, v]) => v === "fail" && k !== "caption_compliance");
+      // Evidence is shown only for the render it describes; an edit since makes it stale.
+      const visual = clip.visualReview && clip.visualReview.edits === clip.editLog.length ? clip.visualReview : null;
       const deciding = clip.status === "awaiting_review";
       const captionEditable = clip.status === "awaiting_review" || clip.status === "needs_edit";
       const postable = clip.status === "ready_to_post" || clip.status === "posted";
@@ -485,7 +487,13 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
             <div class="card">
               <p><strong>Duration</strong> ${seconds(clip.durationMs)} · <strong>Score</strong> ${clip.opusclipScore ?? "?"}
                 ${clip.opusclipSubScores ? html`<span class="muted">(${Object.entries(clip.opusclipSubScores).map(([k, v]) => `${k} ${v}`).join(", ")})</span>` : ""}</p>
-              <p><strong>Checks</strong><br>${checks.map(([k, v]) => html`${badge(v)}<span class="muted">${k.replace(/_/g, " ")}</span><br>`)}</p>
+              <p><strong>Checks</strong><br>${checks.map(
+                ([k, v]) =>
+                  html`${badge(v)}<span class="muted">${k.replace(/_/g, " ")}</span>${visual?.checks[k] ? html`<br><small>${visual.checks[k].evidence}</small>` : ""}<br>`,
+              )}</p>
+              <p><strong>Operator's look at the frames</strong><br>${visual
+                ? html`${visual.summary} <span class="muted">(${visual.framesChecked} frames, ${visual.at.slice(0, 16).replace("T", " ")} UTC)</span>`
+                : html`<span class="muted">${clip.visualReview ? "out of date: the clip was edited since" : "not reviewed yet"}</span>`}</p>
               <p><strong>Operator pre-screen</strong><br>${clip.prescreenVerdict ? html`<strong>${clip.prescreenVerdict}</strong>: ${clip.prescreenNotes ?? ""}` : html`<span class="muted">none yet</span>`}</p>
               ${clip.description ? html`<p><strong>OpusClip description</strong><br>${clip.description} <span class="muted">${clip.hashtags ?? ""}</span></p>` : ""}
             </div>

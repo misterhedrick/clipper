@@ -31,7 +31,7 @@ When a person asks for an operator run, go through these in order. Skip any step
 |---|---|---|
 | 1 | [Triage](triage.md) | `clipper attention list` is non-empty, or any job is stuck in `submitting` |
 | 2 | [Collect clips](collect.md) | jobs in `project_created` / `processing` |
-| 3 | [Pre-screen candidates](prescreen.md) | candidates in `awaiting_review` without a prescreen, or in `needs_edit` |
+| 3 | [Look at, then pre-screen candidates](prescreen.md) | candidates in `awaiting_review` without a prescreen, or in `needs_edit`. Every recommend/hold needs a visual review of the clip's frames first |
 | 4 | [Export and package](collect.md#export-and-package) | candidates a person `approved` |
 | 5 | [Source footage](source-footage.md) | `active` campaigns: new files in registered sources, or no sources registered |
 | 6 | [Submit](submit.md) | source jobs in `detected` / `queued` |

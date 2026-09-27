@@ -83,6 +83,7 @@ The playbook tells Claude what to do. These invariants make sure a mistake in fo
 6. **No posting or sharing tools.** OpusClip's post, schedule and share tools are denied in `.claude/settings.json`.
 7. **Public sources only.** Listing and submit commands fetch anonymously. A sign-in wall becomes a `needs_attention` reason, never an auth attempt.
 8. **Caption validation.** `clipper candidate set-caption` rejects a caption that's missing any of the campaign's required phrases, tags or disclosures. Claude drafts, code verifies.
+8a. **Look before vouching.** `clipper candidate prescreen` refuses a `recommend` or `hold` until the clip's current render has a visual review (`candidate frames` → Claude looks → `candidate visual-review`). The review must cover exactly the checks the clip data can't settle (the campaign's `review.requiredChecks`, on-screen text, overlays, aspect), each with evidence. A `fail` it records counts like any failed check: approving needs the reviewer's explicit override. An edit makes the review stale and sends those checks back to `manual_review_required`.
 9. **Every write is audited.** Status changes write `status_events` (via `transition()`); other writes (classify, add footage, captions, …) write `audit_log` in the same transaction. CLI writes are attributed to `claude-operator`, web-app writes to `reviewer:<identity>`.
 
 ## `clipper` CLI contract
@@ -126,7 +127,10 @@ clipper candidate upsert <sourceJobId> --file clips.json   store opusclip_list_c
 clipper candidate list [--status s] [--campaign id] [--job id]  (r) includes OpusClip title/description/hashtags/score + check results
 clipper candidate record-edit <id> --ops-file ops.json --reason "..."   log a connector edit; candidate → awaiting_review again
 clipper candidate record-export <id> --url <exportUrl>   store the HD export URL from opusclip_export_clip (approved candidates only)
-clipper candidate prescreen <id> --verdict <recommend|hold|reject> --notes "..."   advisory only; never approves
+clipper candidate show <id>   (r) one candidate + visualChecks (the checks its visual review must cover)
+clipper candidate frames <id> [--out dir] [--every sec] [--at sec,...]   (r, local) preview → still frames + contact sheets on the operator's disk; in remote mode only the lookup goes to the app
+clipper candidate visual-review <id> --file review.json   record {framesChecked, summary, checks: {name: {result, evidence}}} for exactly visualChecks
+clipper candidate prescreen <id> --verdict <recommend|hold|reject> --notes "..."   advisory only; never approves; recommend/hold need a current visual review
 clipper candidate set-caption <id> --file caption.txt   validated against campaign requirements
 clipper candidate reject <id...> | --campaign <id> --reason "..." --requested-by <name>   only when a person asked: clips awaiting_review/needs_edit → rejected, requester recorded
 
@@ -167,7 +171,8 @@ src/
     footage-sources/        URL → kind classification; Drive folder / YouTube feed listing
     credits/                credit ledger: reserve / release / reconcile, budget checks
     compliance/             objective checks + caption requirement validation (pure functions)
-    candidates/             opusclip_list_clips parsing, candidate upsert, pre-screen, captions, edit log
+    candidates/             opusclip_list_clips parsing, candidate upsert, visual review, pre-screen, captions, edit log
+    frames/                 preview video → sampled stills + contact sheets (ffmpeg; the operator looks at them)
     review/                 human-only decisions: confirm/pause campaigns, approve/needs-edit/reject/hold, record posts
   web/                      review web app: reviewer sign-in (auth.ts), escaped HTML (html.ts), pages + forms (routes.ts)
     packaging/              Ready-to-Post bundle → R2 (streamed; r2.ts is the S3-API adapter)

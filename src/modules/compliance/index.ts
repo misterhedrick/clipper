@@ -21,6 +21,17 @@ export type CheckResults = Record<string, CheckOutcome>;
 /** Set by `candidate set-caption` once a caption passes validateCaption(). */
 export const CAPTION_CHECK = "caption_compliance";
 
+/**
+ * The checks a look at the clip's frames settles (`candidate visual-review`):
+ * everything the objective checks left to the reviewer, except duration (code's,
+ * from OpusClip's data) and the caption (`candidate set-caption` owns it).
+ */
+export function visualCheckNames(objective: CheckResults): string[] {
+  return Object.entries(objective)
+    .filter(([name, outcome]) => outcome === "manual_review_required" && name !== CAPTION_CHECK && name !== "duration")
+    .map(([name]) => name);
+}
+
 const NAMED_ASPECTS: Record<string, AspectRatio> = {
   portrait: "portrait",
   vertical: "portrait",

@@ -180,6 +180,7 @@ export async function packageCandidate(ctx: PackagingCtx, id: string) {
       source: { jobId: job.id, name: job.sourceName, path: job.sourcePath, kind: job.sourceKind, url: job.sourceUrl },
       opusclip: { projectId: job.opusclipProjectId, clipId: clip.opusclipClipId, score: clip.opusclipScore === null ? null : Number(clip.opusclipScore), subScores: clip.opusclipSubScores },
       checks: clip.checkResults,
+      visualReview: clip.visualReview,
       prescreen: clip.prescreenVerdict ? { verdict: clip.prescreenVerdict, notes: clip.prescreenNotes } : null,
       approval: { by: approval.actor, at: approval.createdAt, notes: clip.reviewNotes },
       edits: clip.editLog,
