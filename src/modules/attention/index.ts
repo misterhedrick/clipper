@@ -2,6 +2,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { audit } from "../../db/audit.js";
 import { auditLog, campaigns, sourceJobs, statusEvents, type EntityType } from "../../db/schema.js";
+import { SELF_VERIFIED_BY } from "../campaigns/index.js";
 
 // Everything waiting on a person or on triage, and the notification digest for
 // it. An item is notified once per status change: the digest records which
@@ -15,12 +16,21 @@ export const STALE_CONFIG_HOURS = 24;
 export type AttentionItem = {
   entity: Extract<EntityType, "campaign" | "source_job">;
   id: string;
-  kind: "campaign_needs_attention" | "config_waiting" | "job_needs_attention" | "job_validation_failed" | "job_waiting_on_drive" | "job_submit_failed";
+  kind:
+    | "campaign_needs_attention"
+    | "config_waiting"
+    | "campaign_join"
+    | "job_needs_attention"
+    | "job_validation_failed"
+    | "job_waiting_on_drive"
+    | "job_submit_failed";
   status: string;
   reason: string | null;
   campaignId: string;
   campaign: string | null;
   name?: string | null;
+  /** The Content Rewards page, for campaign_join. */
+  url?: string;
   since: Date | null;
   statusEventId: string | null;
 };
@@ -76,12 +86,35 @@ export async function listAttention(db: Db): Promise<{ items: AttentionItem[] }>
   return { items };
 }
 
+/**
+ * Campaigns the operator activated under the self-verified standing rule: the
+ * person still has to join each on Content Rewards. Announced once per activation.
+ */
+async function joinReminders(db: Db): Promise<AttentionItem[]> {
+  const live = await db.select().from(campaigns).where(and(eq(campaigns.status, "active"), eq(campaigns.configConfirmedBy, SELF_VERIFIED_BY)));
+  const latest = await latestEvents(db, live.map((c) => c.id));
+  return live.map((c) => ({
+    entity: "campaign" as const,
+    id: c.id,
+    kind: "campaign_join" as const,
+    status: c.status,
+    reason: null,
+    campaignId: c.id,
+    campaign: c.title,
+    url: c.contentRewardsUrl,
+    since: latest.get(c.id)?.at ?? c.updatedAt,
+    statusEventId: latest.get(c.id)?.id ?? null,
+  }));
+}
+
 const describe = (i: AttentionItem, now: Date) => {
   const hours = i.since ? Math.floor((now.getTime() - i.since.getTime()) / 3_600_000) : null;
   const what = i.name ? `${i.campaign ?? "?"} / ${i.name}` : (i.campaign ?? i.id);
   switch (i.kind) {
     case "config_waiting":
       return `• Config waiting for your confirmation${hours !== null ? ` for ${hours}h` : ""}: ${what}`;
+    case "campaign_join":
+      return `• Live and clipping: join it on Content Rewards (Claude verified the rules and activated it): ${what} ${i.url ?? ""}`.trimEnd();
     case "campaign_needs_attention":
       return `• Campaign needs attention: ${what}: ${i.reason ?? "no reason recorded"}`;
     case "job_waiting_on_drive":
@@ -110,7 +143,10 @@ export async function notifyAttention(ctx: NotifyAttentionCtx) {
   const now = ctx.now?.() ?? new Date();
   const staleMs = (ctx.staleConfigHours ?? STALE_CONFIG_HOURS) * 3_600_000;
   const { items } = await listAttention(ctx.db);
-  const due = items.filter((i) => i.kind !== "config_waiting" || (i.since !== null && now.getTime() - i.since.getTime() >= staleMs));
+  const due = [
+    ...(await joinReminders(ctx.db)),
+    ...items.filter((i) => i.kind !== "config_waiting" || (i.since !== null && now.getTime() - i.since.getTime() >= staleMs)),
+  ];
 
   const eventIds = due.map((i) => i.statusEventId).filter((x): x is string => x !== null);
   const already = new Set<string>();

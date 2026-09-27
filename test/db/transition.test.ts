@@ -134,9 +134,14 @@ describe.skipIf(!TEST_DATABASE_URL)("transition()", () => {
     }
     const err = await rejection(transition(db, { entity: "campaign", id: campaign.id, to: "active", actor: OPERATOR_ACTOR, standingRule: "reject_failed_checks" }));
     expect(err.code).toBe("human_only");
+    // Each rule unlocks only its own move.
+    expect((await rejection(transition(db, { entity: "candidate_clip", id: clip!.id, to: "rejected", actor: OPERATOR_ACTOR, standingRule: "activate_verified_config" }))).code).toBe("human_only");
     await expect(
       transition(db, { entity: "candidate_clip", id: clip!.id, to: "rejected", actor: OPERATOR_ACTOR, standingRule: "reject_failed_checks" }),
     ).resolves.toEqual({ from: "awaiting_review", to: "rejected" });
+    await expect(
+      transition(db, { entity: "campaign", id: campaign.id, to: "active", actor: OPERATOR_ACTOR, standingRule: "activate_verified_config" }),
+    ).resolves.toEqual({ from: "pending_confirmation", to: "active" });
   });
 
   it("lets automation return a failed packaging run to approved, and nothing else", async () => {

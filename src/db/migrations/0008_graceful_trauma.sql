@@ -1,0 +1,1 @@
+ALTER TABLE "campaigns" ADD COLUMN "config_verification" jsonb;

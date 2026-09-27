@@ -89,6 +89,14 @@ Added 2026-09-27 after the first Boxabl batch: its transcripts read fine, but th
 - Automatic fixes (standing rule, 2026-09-27): `clipper guard edit` (PreToolUse hook on `opusclip_edit_clip`) and `candidate record-edit --fixes`. Allowed only for a clip awaiting review with a failed check, fixing ops only, at most `MAX_AUTO_FIXES` (2) per clip; the visual review and pre-screen are cleared so the new render is judged afresh.
 - **Done when:** a clip can't be recommended without a visual review; a review missing a check, naming a code-owned check or lacking evidence is refused; an edit makes it stale; frames come out of a real video through the CLI in remote-mode shape. All covered by tests (`test/cli/candidate.test.ts`, `test/modules/frames/frames.test.ts`, `test/web/review.test.ts`).
 
+## 10c. Self-verified campaign activation ✅ done
+Added 2026-09-27: the user no longer confirms configs by hand; Claude checks its own draft against the source and activates.
+- `campaigns.config_verification` (migration `0008`): the rounds of `clipper campaign verify-config`, each covering every config field (`match | mismatch | unsettled` + evidence) and any missed rules, pinned to the config's hash.
+- Outcomes: `verified`; `needs_changes` (correct with `propose-config`, which keeps the rounds, and verify again); `unsettled` → `needs_attention` at once; still not matching at round 3 → `needs_attention`. `needs_attention` reaches Discord through the attention digest.
+- `clipper campaign activate`: `transition()`'s `activate_verified_config` standing rule (only `campaign → active`), only from `pending_confirmation`, `lf`, no unresolved fields, latest round verified for the exact current config. `config_confirmed_by` = `claude-operator (self-verified)`.
+- The attention digest tells the person, once per activation, to join each self-activated campaign on Content Rewards. Clipping starts right away.
+- **Done when:** activation is refused without a verified round, after a config change, or with unresolved fields; mismatches loop and flag at round 3; unsettled flags at once; the join ping is sent once; the rule unlocks nothing else. Covered by tests (`test/cli/campaign.test.ts`, `test/db/transition.test.ts`).
+
 ## 11. Review web app ✅ done
 - Server-rendered pages on the existing Fastify app, behind `REVIEWER_TOKEN` for v1: campaigns awaiting confirmation (edit + confirm → `active`), candidate queue with preview video, checks, prescreen notes and caption (approve / needs edit / reject / hold), post recording.
 - **Done when:** approve is only reachable through an authenticated request, and every decision writes a `status_events` row with the reviewer as actor.
