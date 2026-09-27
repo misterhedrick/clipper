@@ -205,6 +205,10 @@ Unique: `(campaign_id, url)`.
 
 `candidate_clips`: add `package_key text` (the R2 prefix `clipper package` wrote the Ready-to-Post bundle under, e.g. `ready-to-post/<campaign>-<id8>/<clip>-<id8>/`) and `packaged_at timestamptz`.
 
+### v8 changes (migration `0007_workable_titanium_man`, BUILD_PLAN task 10b)
+
+`candidate_clips`: add `visual_review jsonb`, what the operator saw in the clip's frames: `{at, actor, framesChecked, summary, edits, checks: {[checkName]: {result, evidence}}}`. Its results are also written into `check_results`. `edits` is the `edit_log` length it was made against; once an edit is recorded the review is cleared and its checks go back to `manual_review_required`.
+
 ### `credit_ledger` (new)
 
 One row per credit reservation made by `clipper source reserve`.

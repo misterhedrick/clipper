@@ -1,14 +1,20 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   listCandidates,
   prescreenCandidate,
   recordEdit,
+  recordVisualReview,
   rejectCandidates,
   setCaption,
+  showCandidate,
   upsertCandidates,
 } from "../../modules/candidates/index.js";
+import { DEFAULT_EVERY_SEC, extractFrames } from "../../modules/frames/index.js";
+import { proxiedFetch } from "../proxy-fetch.js";
 import { resolveCampaign } from "../../modules/campaigns/index.js";
 import { recordExport } from "../../modules/packaging/index.js";
-import { positional, readJsonInput, readTextInput, requiredOption, type Command, type CommandContext } from "../run.js";
+import { positional, readJsonInput, readTextInput, requiredOption, UsageError, type Command, type CommandContext } from "../run.js";
 
 // There is deliberately no approve / needs-edit / post command here: those are
 // a reviewer's decisions, made in the review web app. `reject` is the one
@@ -34,6 +40,64 @@ export const candidateCommands: Record<string, Command> = {
       const campaignId = ctx.options.campaign ? (await resolveCampaign(db, ctx.options.campaign as string)).id : undefined;
       return listCandidates(db, { status: ctx.options.status as string | undefined, campaignId, jobId: ctx.options.job as string | undefined });
     },
+  },
+  show: {
+    summary: "(read-only) One candidate, as `list` shows it, plus `visualChecks`: the checks its visual review must cover.",
+    usage: "<candidateId>",
+    run: (ctx) => showCandidate(ctx.db(), positional(ctx, 0, "candidateId")),
+  },
+  frames: {
+    summary:
+      "(local, read-only) Download a candidate's preview and write still frames + contact sheets to a local folder for a visual review. Opening sampled densely, then every --every seconds; --at adds full-size stills (e.g. to read a caption word).",
+    usage: "<candidateId> [--out <dir>] [--every <sec>] [--at <sec,sec,...>]",
+    options: { out: { type: "string" }, every: { type: "string" }, at: { type: "string" } },
+    exitCode: (r) => ((r as { error?: unknown }).error ? 1 : 0),
+    run: async (ctx) => {
+      // The frames are for the operator to look at, so they're written where the operator runs, never on the server.
+      if (!ctx.allowFilePaths) throw new UsageError("`candidate frames` runs on the operator's machine, not over the operator endpoint");
+      const id = positional(ctx, 0, "candidateId");
+      const every = ctx.options.every === undefined ? DEFAULT_EVERY_SEC : Number(ctx.options.every);
+      const at = typeof ctx.options.at === "string" ? ctx.options.at.split(",").map((s) => Number(s.trim())) : [];
+      if (!(every > 0) || at.some((t) => !Number.isFinite(t))) throw new UsageError("--every and --at take seconds");
+
+      let candidate: { previewUrl?: string | null; durationMs?: number | null; visualChecks?: string[]; title?: string | null };
+      if (ctx.showCandidate) {
+        const res = await ctx.showCandidate(id);
+        if (res.exitCode !== 0) return res.output as object;
+        candidate = res.output as typeof candidate;
+      } else candidate = await showCandidate(ctx.db(), id);
+      if (!candidate.previewUrl) throw new UsageError(`Candidate ${id} has no preview URL; upsert its job again with a fresh opusclip_list_clips`);
+
+      const outDir = typeof ctx.options.out === "string" ? ctx.options.out : join(tmpdir(), "clipper-frames", id);
+      const doFetch = ctx.env.HTTPS_PROXY || ctx.env.https_proxy ? await proxiedFetch() : fetch;
+      const result = await extractFrames({
+        url: candidate.previewUrl,
+        outDir,
+        durationSec: candidate.durationMs ? candidate.durationMs / 1000 : undefined,
+        everySec: every,
+        at,
+        fetch: doFetch,
+      });
+      return {
+        id,
+        title: candidate.title ?? null,
+        visualChecks: candidate.visualChecks ?? [],
+        outDir,
+        durationSec: result.durationSec,
+        sheets: result.sheets,
+        stills: result.stills,
+        frames: result.frames.length,
+        next: `Look at every sheet, then record \`clipper candidate visual-review ${id} --file review.json\` covering each of visualChecks.`,
+      };
+    },
+  },
+  "visual-review": {
+    summary:
+      "Record what the frames showed: a result (pass | fail | manual_review_required) and evidence for every check in `show`'s visualChecks. Required before a recommend or hold pre-screen; a failed check makes approval need the reviewer's override.",
+    usage: "<candidateId> --file <review.json | ->   (review.json: {framesChecked, summary, checks: {<name>: {result, evidence}}})",
+    options: { file: { type: "string" } },
+    run: async (ctx) =>
+      recordVisualReview(moduleCtx(ctx), positional(ctx, 0, "candidateId"), await readJsonInput(ctx, requiredOption(ctx, "file"))),
   },
   prescreen: {
     summary: "Record an advisory verdict (recommend | hold | reject) with notes. Never approves; changes no status.",

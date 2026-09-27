@@ -104,6 +104,20 @@ export type CheckOutcome = (typeof CHECK_OUTCOMES)[number];
 
 export type ClipEdit = { ops: unknown[]; reason: string; at: string };
 
+/**
+ * The operator's look at a clip's frames (`candidate visual-review`): one result
+ * with evidence per check that the clip data alone can't settle. `edits` is how
+ * many edits the clip had when it was reviewed; an edit makes the review stale.
+ */
+export type VisualReview = {
+  at: string;
+  actor: string;
+  framesChecked: number;
+  summary: string;
+  edits: number;
+  checks: Record<string, { result: CheckOutcome; evidence: string }>;
+};
+
 const inList = (column: string, values: readonly string[]) =>
   sql.raw(`${column} in (${values.map((v) => `'${v}'`).join(", ")})`);
 
@@ -241,6 +255,7 @@ export const candidateClips = pgTable(
     caption: text("caption"),
     reviewNotes: text("review_notes"),
     editLog: jsonb("edit_log").$type<ClipEdit[]>().notNull().default([]),
+    visualReview: jsonb("visual_review").$type<VisualReview>(),
   },
   (t) => [
     index("candidate_clips_status_idx").on(t.status),

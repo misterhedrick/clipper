@@ -84,6 +84,7 @@ flowchart TD
 | 8 | Credit ledger + submit protocol + guard hook | ✅ **live** 2026-09-24: Drive upload (496 MB in 92 s) → reserve → guarded submit → project `P3092415v0K3` recorded, 10 credits |
 | 9 | Collect clips from OpusClip + objective checks (`candidate upsert`) | ✅ **live** 2026-09-24: 15 real clips upserted unchanged (fields `clip_id`, `duration_sec`, `preview_url`, `is_bonus`, `stage: COMPLETE`); parser narrowed to the observed shape 2026-09-27, which also started keeping the judge sub-scores (sent as `hook_score` etc.) |
 | 10 | Caption validation + pre-screen + reviewer-requested edits | ✅ |
+| 10b | Visual review: Claude looks at every clip's frames and records each check with evidence before recommending | ✅ 2026-09-27 |
 | 11 | Review web page (confirm configs, approve clips, record posts) | ✅ |
 | 12 | Ready-to-Post packaging to R2 + notifications | ✅ code · notifications ✅ live · R2 bucket ✅ live and verified |
 | 13 | Deploy: Render web (free) + Supabase Postgres (free) + on-demand operator runs | ✅ review page **live**; operator remote mode **live and verified from a cloud session**; Discord notifications **live and verified** 2026-09-23; manual empty-queue run done 2026-09-23 (report: "Needs you: nothing") |
