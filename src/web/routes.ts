@@ -422,17 +422,23 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
           )}</p>
           ${rows.length === 0 ? html`<p class="muted">Nothing here.</p>` : ""}
           ${rows.map(({ clip, job, campaign }) => {
-            const checks = Object.entries(clip.checkResults ?? {});
+            // Failures first, then anything needing a look, then passes.
+            const rank = (v: string) => (v === "fail" ? 0 : v === "pass" ? 2 : 1);
+            const checks = Object.entries(clip.checkResults ?? {}).sort(([, a], [, b]) => rank(a) - rank(b));
+            const passed = checks.filter(([, v]) => v === "pass").length;
             const thumb = safeUrl(clip.thumbnailUrl);
-            return html`<div class="card">
-              <div class="grid">
-                <div>${thumb ? html`<img src="${thumb}" alt="" style="max-width:100%;border-radius:6px">` : html`<span class="muted">no thumbnail</span>`}</div>
-                <div>
-                  <h2 style="margin-top:0"><a href="/candidates/${clip.id}">${clip.title ?? clip.opusclipClipId}</a></h2>
-                  <p class="muted">${campaign.title} · ${job.sourceName ?? job.sourceKey} · ${seconds(clip.durationMs)} · score ${clip.opusclipScore ?? "?"}</p>
-                  <p>${checks.map(([k, v]) => html`<span title="${k}">${badge(v)}</span><span class="muted">${k.replace(/_/g, " ")}</span> `)}</p>
-                  <p>${clip.prescreenVerdict ? html`Operator: <strong>${clip.prescreenVerdict}</strong> <span class="muted">${clip.prescreenNotes ?? ""}</span>` : html`<span class="muted">not pre-screened yet</span>`}</p>
+            const verdict = clip.prescreenVerdict;
+            const tone = verdict === "recommend" ? "ok" : verdict === "reject" ? "bad" : verdict ? "warn" : "";
+            return html`<div class="card clip">
+              <a class="clip-thumb" href="/candidates/${clip.id}">${thumb ? html`<img src="${thumb}" alt="">` : html`<span class="muted">no thumbnail</span>`}</a>
+              <div>
+                <div class="clip-head">
+                  <h2><a href="/candidates/${clip.id}">${clip.title ?? clip.opusclipClipId}</a></h2>
+                  ${verdict ? html`<span class="badge ${tone}">${verdict}</span>` : ""}
                 </div>
+                <p class="muted clip-meta">${campaign.title} · ${job.sourceName ?? job.sourceKey} · ${seconds(clip.durationMs)} · score ${clip.opusclipScore ?? "?"}${checks.length ? html` · ${passed}/${checks.length} checks pass` : ""}</p>
+                ${checks.length ? html`<ul class="checks">${checks.map(([k, v]) => html`<li>${badge(v)}<span>${k.replace(/_/g, " ")}</span></li>`)}</ul>` : ""}
+                ${verdict ? html`<p class="verdict ${tone}"><strong>Operator:</strong> ${clip.prescreenNotes ?? ""}</p>` : html`<p class="muted">Not pre-screened yet.</p>`}
               </div>
             </div>`;
           })}`,

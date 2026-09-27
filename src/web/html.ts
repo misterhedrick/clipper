@@ -138,6 +138,21 @@ export function page(opts: { title: string; reviewer?: string; flash?: { ok?: st
   @media (min-width: 640px) { img { border-radius: 8px; } }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; }
   @media (min-width: 640px) { .actions { gap: 10px; } }
+  .clip { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 12px; align-items: start; }
+  @media (min-width: 640px) { .clip { grid-template-columns: 170px minmax(0, 1fr); gap: 20px; } }
+  .clip-thumb img { width: 100%; aspect-ratio: 9 / 16; object-fit: cover; }
+  .clip-thumb .muted { display: flex; align-items: center; justify-content: center; aspect-ratio: 9 / 16; border: 1px dashed var(--line); border-radius: 6px; font-size: 13px; }
+  .clip-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; justify-content: space-between; }
+  .clip-head h2 { margin: 0; overflow-wrap: anywhere; }
+  .clip-meta, .checks, .verdict { overflow-wrap: anywhere; }
+  .clip-meta { margin: 4px 0 10px; font-size: 14px; }
+  .checks { list-style: none; padding: 0; margin: 10px 0; display: grid; grid-template-columns: 1fr; gap: 2px 16px; font-size: 14px; }
+  @media (min-width: 900px) { .checks { grid-template-columns: repeat(2, 1fr); } }
+  .checks li { display: flex; gap: 8px; align-items: baseline; line-height: 1.35; padding: 3px 0; }
+  .checks .badge { margin: 0; flex: none; min-width: 3.4em; text-align: center; padding: 2px 8px; font-size: .75rem; }
+  .verdict { border-left: 4px solid var(--line); background: var(--bg); border-radius: 6px; padding: 10px 12px; margin: 10px 0 0; font-size: 14px; }
+  .verdict.ok { border-color: var(--ok); } .verdict.bad { border-color: var(--bad); } .verdict.warn { border-color: var(--warn); }
+  .verdict.ok, .verdict.bad, .verdict.warn { color: var(--fg); background: var(--bg); }
   details { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin: 10px 0; }
   @media (min-width: 640px) { details { border-radius: 8px; padding: 14px; } }
   summary { cursor: pointer; font-weight: 600; color: var(--accent); user-select: none; }
