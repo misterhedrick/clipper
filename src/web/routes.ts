@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Db } from "../db/client.js";
 import { TransitionError } from "../db/transition.js";
 import { CANDIDATE_CLIP_STATUSES, POST_PLATFORMS, type CandidateClipStatus } from "../db/schema.js";
-import { InvalidConfigError, validateCampaignConfig } from "../modules/campaign-config/index.js";
+import { InvalidConfigError, validateCampaignConfig, type CampaignConfig } from "../modules/campaign-config/index.js";
 import { CandidatesError, rejectCandidates, setCaption } from "../modules/candidates/index.js";
 import {
   campaignDetail,
@@ -229,25 +229,26 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
       }
       const c = d.campaign;
       // jsonb doesn't keep key order; show the settings that matter most first.
-      const raw = c.config as Record<string, any>;
-      const cfg: Record<string, any> = Object.fromEntries(
-        [...["clipGeneration", "requirements", "review", "extraction"].filter((k) => k in raw), ...Object.keys(raw)].map((k) => [k, raw[k]]),
+      const raw = c.config as CampaignConfig;
+      const keys = ["clipGeneration", "requirements", "review", "extraction"] as const;
+      const cfg: Partial<CampaignConfig> = Object.fromEntries(
+        [...keys.filter((k) => k in raw), ...Object.keys(raw).filter((k) => !keys.includes(k as never))].map((k) => [k, raw[k as keyof CampaignConfig]]),
       );
-      const gen = cfg.clipGeneration ?? {};
-      const reqs = cfg.requirements ?? {};
-      const summary = gen.aspectRatio
+      const gen = cfg.clipGeneration;
+      const reqs = cfg.requirements;
+      const summary = gen?.aspectRatio
         ? html`<ul>
             <li><strong>Clips:</strong> ${gen.aspectRatio}, ${gen.minDurationSeconds}–${gen.maxDurationSeconds}s, captions ${gen.captionsEnabled ? "on" : "off"}, ${gen.originalAudioOnly ? "original audio only" : "music allowed"}, template ${gen.brandTemplateId ?? "OpusClip default"}</li>
-            ${reqs.requiredCaptionLines?.length ? html`<li><strong>Caption must contain:</strong> ${(reqs.requiredCaptionLines as string[]).map((l) => html`<code>${l}</code> `)}</li>` : ""}
-            ${reqs.requiredTags?.length ? html`<li><strong>Tags:</strong> ${(reqs.requiredTags as string[]).join(" ")}</li>` : ""}
-            ${reqs.disclosureLines?.length ? html`<li><strong>Disclosure:</strong> ${(reqs.disclosureLines as string[]).join(" ")}</li>` : ""}
-            ${reqs.requiredOnScreenText?.length ? html`<li><strong>On-screen text:</strong> ${(reqs.requiredOnScreenText as string[]).join("; ")}</li>` : ""}
-            ${reqs.maxAdditionalHashtags !== undefined ? html`<li><strong>Extra hashtags allowed:</strong> ${reqs.maxAdditionalHashtags}</li>` : ""}
+            ${reqs?.requiredCaptionLines?.length ? html`<li><strong>Caption must contain:</strong> ${reqs.requiredCaptionLines.map((l) => html`<code>${l}</code> `)}</li>` : ""}
+            ${reqs?.requiredTags?.length ? html`<li><strong>Tags:</strong> ${reqs.requiredTags.join(" ")}</li>` : ""}
+            ${reqs?.disclosureLines?.length ? html`<li><strong>Disclosure:</strong> ${reqs.disclosureLines.join(" ")}</li>` : ""}
+            ${reqs?.requiredOnScreenText?.length ? html`<li><strong>On-screen text:</strong> ${reqs.requiredOnScreenText.join("; ")}</li>` : ""}
+            ${reqs?.maxAdditionalHashtags !== undefined ? html`<li><strong>Extra hashtags allowed:</strong> ${reqs.maxAdditionalHashtags}</li>` : ""}
           </ul>`
         : "";
-      const ext = cfg.extraction ?? {};
-      const low = Object.entries((ext.fieldConfidence ?? {}) as Record<string, string>).filter(([, v]) => v === "low").map(([k]) => k);
-      const snapshot = (c.crSnapshot ?? {}) as Record<string, any>;
+      const ext = cfg.extraction;
+      const low = Object.entries(ext?.fieldConfidence ?? {}).filter(([, v]) => v === "low").map(([k]) => k);
+      const snapshot = (c.crSnapshot ?? {}) as Record<string, unknown>;
       const brief = safeUrl(c.guidelineDocUrl);
       const cr = safeUrl(c.contentRewardsUrl);
 
@@ -258,9 +259,9 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
             <p>The operator drafted this from the brief. Check it against the brief, fix anything wrong, then confirm. Confirming makes the campaign <strong>active</strong>, so the operator can start spending OpusClip credits on it.</p>
             ${summary}
             ${low.length ? html`<p><span class="badge warn">low confidence</span> ${low.join(", ")}</p>` : ""}
-            ${ext.unresolvedFields?.length ? html`<p><span class="badge warn">not in the brief</span> ${(ext.unresolvedFields as string[]).join(", ")}</p>` : ""}
-            ${ext.unexpressedRules?.length
-              ? html`<p><strong>Brief rules the config can't enforce</strong> (you check these per clip):</p><ul>${(ext.unexpressedRules as string[]).map((r) => html`<li>${r}</li>`)}</ul>`
+            ${ext?.unresolvedFields?.length ? html`<p><span class="badge warn">not in the brief</span> ${ext.unresolvedFields.join(", ")}</p>` : ""}
+            ${ext?.unexpressedRules?.length
+              ? html`<p><strong>Brief rules the config can't enforce</strong> (you check these per clip):</p><ul>${ext.unexpressedRules.map((r) => html`<li>${r}</li>`)}</ul>`
               : ""}
             <form method="post" action="/campaigns/${c.id}/confirm">
               <label for="config">Config (JSON)</label>
