@@ -86,6 +86,7 @@ Added 2026-09-27 after the first Boxabl batch: its transcripts read fine, but th
 - `prescreen` refuses `recommend`/`hold` without a visual review of the current render. `reject` needs none.
 - The review page shows the evidence under each check and the summary, or "out of date" after an edit. `clip-metadata.json` carries the visual review too.
 - `clipper candidate reject-failed` (standing rule, decided 2026-09-27): rejects clips with a failed check **and** a pre-screen `reject`, through `transition()`'s `reject_failed_checks` rule (only `candidate_clip → rejected`). Held clips with failures and taste-only rejects are reported, not touched.
+- Automatic fixes (standing rule, 2026-09-27): `clipper guard edit` (PreToolUse hook on `opusclip_edit_clip`) and `candidate record-edit --fixes`. Allowed only for a clip awaiting review with a failed check, fixing ops only, at most `MAX_AUTO_FIXES` (2) per clip; the visual review and pre-screen are cleared so the new render is judged afresh.
 - **Done when:** a clip can't be recommended without a visual review; a review missing a check, naming a code-owned check or lacking evidence is refused; an edit makes it stale; frames come out of a real video through the CLI in remote-mode shape. All covered by tests (`test/cli/candidate.test.ts`, `test/modules/frames/frames.test.ts`, `test/web/review.test.ts`).
 
 ## 11. Review web app ✅ done

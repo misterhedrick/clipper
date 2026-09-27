@@ -24,6 +24,23 @@ A recommend or hold vouches for what's on screen, so the CLI refuses those verdi
 
 Frames are only as good as the preview: if `frames` says the link expired, upsert the job again with a fresh `opusclip_list_clips` first.
 
+## 1b. Fix what an edit can fix (automatic)
+
+If the visual review recorded a `fail` that an OpusClip edit can genuinely fix, fix it yourself, without waiting for a person. Fixable examples:
+- a misheard brand or word in the captions ("BOXABLE" → "BOXABL"): `replace_phrase` (same number of words; `occurrence: "all"` when it repeats);
+- a forbidden word or phrase spoken in the clip: `delete_phrase`;
+- a bad opening, dead air or a section that breaks a rule: `trim_section`, `drop_section`, `remove_pauses`;
+- a clip over the length limit: `trim_section`.
+
+Not fixable by editing, so leave it failed: no home shown, the wrong subject, too short, no BOXABL on screen. Never add a text overlay or turn captions off to make a check pass; the edit guard refuses those ops anyway.
+
+1. `opusclip_edit_clip` with `dryRun: true`, and confirm the ops do exactly the fix.
+2. Run it for real, then poll `opusclip_describe_clip` until `render_pending: false`.
+3. `clipper candidate record-edit <id> --ops-file ops.json --reason "<what failed, with the evidence> → <what you changed>" --fixes <failed check names>`. The clip stays in `awaiting_review`; its visual review and pre-screen are cleared because they described the old render.
+4. Upsert the job again with a fresh `opusclip_list_clips` (new duration and preview), then go back to step 1: frames, visual review, then judge.
+
+A hook (`clipper guard edit`) blocks any real edit that isn't a reviewer's `needs_edit` or a fix of a clip with a failed check, using fixing ops only, at most 2 automatic fixes per clip. If a second fix still fails the check, stop: the verdict is `reject` (and `reject-failed` removes it) or a `hold` with notes for the reviewer.
+
 ## 2. Judge it against the brief
 
 With the checks settled, decide the verdict. Use OpusClip's title, description, hashtags, score and sub-scores, and the transcript: judge the words, not the title. Consider:
@@ -55,4 +72,4 @@ Only for candidates a person marked `needs_edit`, and only the change their note
 3. `clipper candidate record-edit <id> --ops-file ops.json --reason "<reviewer note → what you changed>"`. The candidate returns to `awaiting_review` for the person to look again.
 4. The edit made the old visual review stale (its checks went back to `manual_review_required`), so do step 1 again on the new render before you pre-screen it.
 
-Don't edit clips nobody asked you to fix, and don't use edits to make a clip pass a check it failed. That's the reviewer's call.
+Outside step 1b, don't edit clips nobody asked you to fix.
