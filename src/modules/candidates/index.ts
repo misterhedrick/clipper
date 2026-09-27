@@ -15,7 +15,7 @@ import {
   type SourceJobStatus,
   type VisualReview,
 } from "../../db/schema.js";
-import { isHumanActor, recordCreated, transition } from "../../db/transition.js";
+import { isHumanActor, recordCreated, STANDING_RULES, transition } from "../../db/transition.js";
 import { loadJobWithCampaign, loadCandidateWithContext } from "../../db/helpers.js";
 import { validateCampaignConfig, type CampaignConfig } from "../campaign-config/index.js";
 import {
@@ -431,6 +431,59 @@ export async function rejectCandidates(
     }
   });
   return { rejected: open.map((r) => r.id), count: open.length, reason: statusReason };
+}
+
+/**
+ * The standing rule (2026-09-27): the operator rejects, without anyone asking
+ * each time, every clip still waiting on a decision that has a recorded failed
+ * check (code's, or a visual review's with evidence) AND the operator's own
+ * pre-screen verdict of reject. A held clip with a failed check (e.g. waiting
+ * on a caption fix) is left alone, and so is anything rejected on taste alone.
+ * Rejects are final, as any reject is.
+ */
+export async function rejectFailedCandidates(ctx: CandidatesCtx, filter: { campaignId?: string } = {}) {
+  const rows = await ctx.db
+    .select({ clip: candidateClips })
+    .from(candidateClips)
+    .innerJoin(sourceJobs, eq(sourceJobs.id, candidateClips.sourceJobId))
+    .where(and(inArray(candidateClips.status, [...REJECTABLE]), filter.campaignId ? eq(sourceJobs.campaignId, filter.campaignId) : undefined))
+    .orderBy(asc(candidateClips.createdAt));
+
+  const failedChecks = (clip: CandidateRow) =>
+    Object.entries(clip.checkResults ?? {})
+      .filter(([, outcome]) => outcome === "fail")
+      .map(([name]) => name);
+  const evidence = (clip: CandidateRow, name: string) => {
+    if (name === "duration" && clip.durationMs !== null) return `duration (${Math.round(clip.durationMs / 1000)}s is outside the campaign's limits)`;
+    const seen = currentVisualReview(clip)?.checks[name]?.evidence;
+    return seen ? `${name} (${seen})` : name;
+  };
+
+  const rejected: { id: string; failed: string[]; reason: string }[] = [];
+  const keptWithFailures: { id: string; failed: string[]; verdict: string | null }[] = [];
+  await ctx.db.transaction(async (tx) => {
+    for (const { clip } of rows) {
+      const failed = failedChecks(clip);
+      if (!failed.length) continue;
+      if (clip.prescreenVerdict !== "reject") {
+        keptWithFailures.push({ id: clip.id, failed, verdict: clip.prescreenVerdict });
+        continue;
+      }
+      const reason = `Failed ${failed.map((n) => evidence(clip, n)).join("; ")}`;
+      await transition(tx, {
+        entity: "candidate_clip",
+        id: clip.id,
+        to: "rejected",
+        actor: ctx.actor,
+        reason: `${reason} (${STANDING_RULES.reject_failed_checks})`,
+        standingRule: "reject_failed_checks",
+        expectFrom: REJECTABLE,
+        set: { reviewNotes: reason },
+      });
+      rejected.push({ id: clip.id, failed, reason });
+    }
+  });
+  return { rejected, count: rejected.length, keptWithFailures };
 }
 
 /**

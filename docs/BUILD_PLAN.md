@@ -85,6 +85,7 @@ Added 2026-09-27 after the first Boxabl batch: its transcripts read fine, but th
 - `visual-review` must cover exactly the checks the clip data leaves to a person (`visualCheckNames`: everything `runObjectiveChecks` marks `manual_review_required` except duration and the caption), each with a result and evidence. Results land in `check_results`; the record in `visual_review`. Refreshing from OpusClip keeps them; `record-edit` clears them.
 - `prescreen` refuses `recommend`/`hold` without a visual review of the current render. `reject` needs none.
 - The review page shows the evidence under each check and the summary, or "out of date" after an edit. `clip-metadata.json` carries the visual review too.
+- `clipper candidate reject-failed` (standing rule, decided 2026-09-27): rejects clips with a failed check **and** a pre-screen `reject`, through `transition()`'s `reject_failed_checks` rule (only `candidate_clip → rejected`). Held clips with failures and taste-only rejects are reported, not touched.
 - **Done when:** a clip can't be recommended without a visual review; a review missing a check, naming a code-owned check or lacking evidence is refused; an edit makes it stale; frames come out of a real video through the CLI in remote-mode shape. All covered by tests (`test/cli/candidate.test.ts`, `test/modules/frames/frames.test.ts`, `test/web/review.test.ts`).
 
 ## 11. Review web app ✅ done
