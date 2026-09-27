@@ -100,7 +100,9 @@ export function parseDriveFolderHtml(html: string): DriveItem[] {
   const items: DriveItem[] = [];
   const re = /<div class="flip-entry" id="entry-([\w-]+)"[\s\S]*?<a href="([^"]+)"[\s\S]*?<div class="flip-entry-list-icon">([\s\S]*?)<\/div>\s*<div class="flip-entry-title">([^<]*)<\/div>[\s\S]*?<div class="flip-entry-last-modified"><div>([^<]*)<\/div>/g;
   for (const m of html.matchAll(re)) {
-    const [, id, href, icon, title, modified] = m as unknown as string[];
+    // Regex has 5 capture groups: id, href, icon, title, modified. [0] is full match, unused.
+    if (m.length < 6) continue;
+    const [, id, href, icon, title, modified] = m;
     const isFolder = /\/drive\/(?:u\/\d+\/)?folders\//.test(href!) || /aria-label="Folder"/.test(icon!);
     const mimeType = icon!.match(/\/type\/([\w.+-]+\/[\w.+-]+)/)?.[1] ?? null;
     items.push({ id: id!, name: decodeEntities(title!), href: decodeEntities(href!), isFolder, mimeType, modified: modified || null });

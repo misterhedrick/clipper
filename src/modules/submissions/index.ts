@@ -188,7 +188,7 @@ export async function reserve(ctx: SubmitCtx, jobId: string, input: ReserveInput
 
   return ctx.db.transaction(async (tx) => {
     await lockBudget(tx);
-    const { job, campaign } = await loadJob(tx as unknown as Db, jobId);
+    const { job, campaign } = await loadJob(tx as Db, jobId);
     requireActiveCampaign(campaign);
     if (job.status !== "queued") {
       throw new SubmissionError("invalid_state", `Job ${jobId} is ${job.status}; only queued jobs can be reserved (run \`source validate\` first)`);
