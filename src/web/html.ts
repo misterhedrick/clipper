@@ -142,8 +142,7 @@ export function page(opts: { title: string; reviewer?: string; flash?: { ok?: st
   @media (min-width: 640px) { details { border-radius: 8px; padding: 14px; } }
   summary { cursor: pointer; font-weight: 600; color: var(--accent); user-select: none; }
   summary:hover { color: var(--accent-dark); }
-
-
+</style>
 </head>
 <body>
 ${nav}
