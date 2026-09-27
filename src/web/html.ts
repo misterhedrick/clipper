@@ -72,30 +72,53 @@ export function page(opts: { title: string; reviewer?: string; flash?: { ok?: st
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
-  main { max-width: 1000px; margin: 0 auto; padding: 16px; }
-  nav { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--card); }
+  main { max-width: 1000px; margin: 0 auto; padding: 12px; }
+  @media (min-width: 640px) { main { padding: 16px; } }
+  nav { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--card); font-size: 14px; }
+  @media (min-width: 640px) { nav { gap: 16px; padding: 12px 16px; font-size: 15px; } }
+  nav a, nav button { white-space: nowrap; }
   nav form { margin-left: auto; }
-  a { color: var(--accent); }
-  h1 { font-size: 1.5rem; margin: 8px 0 16px; } h2 { font-size: 1.15rem; margin: 24px 0 8px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin: 12px 0; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  h1 { font-size: 1.25rem; margin: 8px 0 12px; }
+  @media (min-width: 640px) { h1 { font-size: 1.5rem; margin: 8px 0 16px; } }
+  h2 { font-size: 1rem; margin: 16px 0 8px; }
+  @media (min-width: 640px) { h2 { font-size: 1.15rem; margin: 24px 0 8px; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin: 8px 0; }
+  @media (min-width: 640px) { .card { border-radius: 8px; padding: 16px; margin: 12px 0; } }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  @media (min-width: 768px) { .grid { grid-template-columns: repeat(2, 1fr); gap: 16px; } }
+  @media (min-width: 1024px) { .grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); } }
   .muted { color: var(--muted); }
-  .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .8rem; margin: 2px 4px 2px 0; }
+  .badge { display: inline-block; padding: 2px 6px; border-radius: 999px; font-size: .75rem; margin: 2px 4px 2px 0; }
+  @media (min-width: 640px) { .badge { padding: 1px 8px; font-size: .8rem; } }
   .ok { color: var(--ok); background: var(--ok-bg); } .bad { color: var(--bad); background: var(--bad-bg); } .warn { color: var(--warn); background: var(--warn-bg); }
-  .flash { padding: 10px 14px; border-radius: 6px; margin: 12px 0; }
-  table { width: 100%; border-collapse: collapse; } td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  .scroll { overflow-x: auto; }
-  pre, textarea { font: 13px/1.4 ui-monospace, monospace; }
+  .flash { padding: 10px 12px; border-radius: 6px; margin: 8px 0; font-size: 14px; }
+  @media (min-width: 640px) { .flash { padding: 10px 14px; margin: 12px 0; font-size: 15px; } }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  @media (min-width: 640px) { table { font-size: 15px; } }
+  td, th { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  @media (min-width: 640px) { td, th { padding: 6px 8px; } }
+  .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  pre, textarea { font: 12px/1.3 ui-monospace, monospace; }
+  @media (min-width: 640px) { pre, textarea { font: 13px/1.4 ui-monospace, monospace; } }
   pre { white-space: pre-wrap; word-break: break-word; background: var(--bg); padding: 8px; border-radius: 6px; margin: 0; }
-  textarea, input, select { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); }
-  label { display: block; margin: 8px 0 4px; font-weight: 600; } label.check { font-weight: normal; display: flex; gap: 8px; align-items: center; }
+  textarea, input, select { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); font-size: 16px; }
+  @media (min-width: 640px) { textarea, input, select { font-size: 15px; } }
+  label { display: block; margin: 8px 0 4px; font-weight: 600; font-size: 14px; }
+  @media (min-width: 640px) { label { font-size: 15px; } }
+  label.check { font-weight: normal; display: flex; gap: 8px; align-items: center; }
   label.check input { width: auto; }
-  button { padding: 8px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--accent); color: #fff; cursor: pointer; font: inherit; margin-top: 8px; }
+  button { padding: 10px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--accent); color: #fff; cursor: pointer; font: inherit; margin-top: 8px; font-size: 14px; }
+  @media (min-width: 640px) { button { padding: 8px 14px; font-size: 15px; } }
   button.secondary { background: var(--card); color: var(--fg); } button.danger { background: var(--bad); }
   button.link { background: none; border: none; color: var(--accent); padding: 0; margin: 0; }
   form.inline { display: inline; }
-  video { width: 100%; max-height: 70vh; background: #000; border-radius: 6px; }
-  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  video { width: 100%; max-height: 50vh; background: #000; border-radius: 6px; }
+  @media (min-width: 640px) { video { max-height: 70vh; } }
+  img { max-width: 100%; height: auto; display: block; }
+  .actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  @media (min-width: 640px) { .actions { gap: 8px; } }
 </style>
 </head>
 <body>
