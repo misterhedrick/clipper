@@ -20,6 +20,15 @@
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-opusclip-submit.sh"
           }
         ]
+      },
+      {
+        "matcher": "mcp__Render__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-render-scope.sh"
+          }
+        ]
       }
     ],
     "SessionStart": [
