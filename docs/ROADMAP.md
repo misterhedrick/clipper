@@ -82,7 +82,7 @@ flowchart TD
 | 6 | Campaign config schema + `propose-config` | ✅ |
 | 7 | Footage sourcing (Drive folders, YouTube channels, select/skip) | ✅ |
 | 8 | Credit ledger + submit protocol + guard hook | ✅ **live** 2026-09-24: Drive upload (496 MB in 92 s) → reserve → guarded submit → project `P3092415v0K3` recorded, 10 credits |
-| 9 | Collect clips from OpusClip + objective checks (`candidate upsert`) | ✅ **live** 2026-09-24: 15 real clips upserted unchanged (fields `clip_id`, `duration_sec`, `preview_url`, `is_bonus`, `stage: COMPLETE`) |
+| 9 | Collect clips from OpusClip + objective checks (`candidate upsert`) | ✅ **live** 2026-09-24: 15 real clips upserted unchanged (fields `clip_id`, `duration_sec`, `preview_url`, `is_bonus`, `stage: COMPLETE`); parser narrowed to the observed shape 2026-09-27, which also started keeping the judge sub-scores (sent as `hook_score` etc.) |
 | 10 | Caption validation + pre-screen + reviewer-requested edits | ✅ |
 | 11 | Review web page (confirm configs, approve clips, record posts) | ✅ |
 | 12 | Ready-to-Post packaging to R2 + notifications | ✅ code · notifications ✅ live · R2 bucket ✅ live and verified |
@@ -129,7 +129,6 @@ The **live database (Supabase)** holds one campaign as of 2026-09-24: **Charlie 
    3. ✅ A run re-queued the *Neighborly* job, uploaded it to OpusClip and submitted a 10-minute slice (10 credits, 2026-09-24). ✅ The next run collected 15 clips and pre-screened them (7 recommend, 5 hold, 3 reject) with caption drafts. Done: a run collects the clips (`candidate upsert`), pre-screens them and drafts captions.
    4. You approve a clip. The next run you start exports it and runs `clipper package`, and you get the bundle link.
 
-   On the first upsert, check the real `opusclip_list_clips` field names and stage values against the parser (`src/modules/candidates/opusclip.ts`), and narrow it to what OpusClip actually sends.
 2. **Task 14:** end to end on a real campaign, twice, checking nothing duplicates.
 
 ## 7. Decisions and inputs needed from you

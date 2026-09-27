@@ -59,7 +59,7 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper candidate …", () => {
       expect(await job()).toMatchObject({ status: "candidates_ready", opusclipStage: "COMPLETE" });
     });
 
-    it("stores OpusClip's metadata and runs the objective checks (wrong aspect fails)", async () => {
+    it("stores OpusClip's metadata and runs the objective checks", async () => {
       await upsert(fixture);
       expect(await clip("P123.c1")).toMatchObject({
         status: "awaiting_review",
@@ -67,12 +67,12 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper candidate …", () => {
         hashtags: "#mw4 #cod",
         durationMs: 32000,
         opusclipScore: "92",
-        opusclipSubScores: { hook: 9.1, coherence: 8.4, connection: 7.9, trend: 6.5 },
-        thumbnailUrl: "https://cdn.opus.pro/P123/c1/thumb.jpg",
-        checkResults: { duration: "pass", aspect_ratio: "pass", caption_compliance: "manual_review_required" },
+        opusclipSubScores: { hook: 9, coherence: 8, connection: 10, trend: 7 },
+        thumbnailUrl: expect.stringContaining("/c.P123.c1/thumbnail.jpg"),
+        // OpusClip reports no aspect ratio, so that check is always the reviewer's.
+        checkResults: { duration: "pass", aspect_ratio: "manual_review_required", caption_compliance: "manual_review_required" },
       });
-      expect((await clip("P123.c2")).checkResults).toMatchObject({ aspect_ratio: "fail", duration: "pass" });
-      expect((await clip("P123.c3")).checkResults).toMatchObject({ aspect_ratio: "manual_review_required", duration: "fail" });
+      expect(await clip("P123.c3")).toMatchObject({ hashtags: null, opusclipSubScores: null, thumbnailUrl: null, checkResults: { duration: "fail" } });
     });
 
     it("keeps a job processing while OpusClip works, and flags it after 6 hours with nothing", async () => {
@@ -102,7 +102,7 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper candidate …", () => {
     });
 
     it("refuses clips from another project, jobs without a project, and bad input", async () => {
-      expect(await upsert({ ...fixture, project_id: "OTHER" })).toMatchObject({ error: { code: "invalid_argument", message: expect.stringContaining("OTHER") } });
+      expect(await upsert({ ...fixture, clips: [{ ...fixture.clips[0], project_id: "OTHER" }] })).toMatchObject({ error: { code: "invalid_argument", message: expect.stringContaining("OTHER") } });
       expect(await upsert({ stage: "x" })).toMatchObject({ error: { code: "invalid_argument" } });
       const c2 = (await db.select().from(campaigns))[0]!;
       const queued = await insertSourceJob(db, c2.id, "file-2", { status: "queued" });

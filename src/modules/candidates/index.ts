@@ -118,7 +118,7 @@ export async function upsertCandidates(ctx: CandidatesCtx, jobId: string, input:
   }
   const projectId = job.opusclipProjectId;
   if (!projectId) throw new CandidatesError("invalid_state", `Job ${jobId} has no OpusClip project recorded`);
-  const foreign = [list.projectId, ...list.clips.map((c) => c.projectId)].find((p) => p && p !== projectId);
+  const foreign = list.clips.map((c) => c.projectId).find((p) => p && p !== projectId);
   if (foreign) throw new CandidatesError("invalid_argument", `These clips belong to project ${foreign}, not job ${jobId}'s project ${projectId}`);
   const ids = list.clips.map((c) => c.clipId);
   const dup = ids.find((clipId, i) => ids.indexOf(clipId) !== i);
