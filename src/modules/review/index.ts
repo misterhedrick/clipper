@@ -15,6 +15,7 @@ import {
   type PostPlatform,
 } from "../../db/schema.js";
 import { isHumanActor, transition } from "../../db/transition.js";
+import { loadCandidateWithContext } from "../../db/helpers.js";
 import { validateCampaignConfig } from "../campaign-config/index.js";
 import { CAPTION_CHECK, validateCaption } from "../compliance/index.js";
 import { canonical } from "../submissions/index.js";
@@ -55,12 +56,7 @@ async function loadCampaign(db: Db, id: string) {
 }
 
 async function loadCandidate(db: Db, id: string) {
-  const [row] = await db
-    .select({ clip: candidateClips, job: sourceJobs, campaign: campaigns })
-    .from(candidateClips)
-    .innerJoin(sourceJobs, eq(sourceJobs.id, candidateClips.sourceJobId))
-    .innerJoin(campaigns, eq(campaigns.id, sourceJobs.campaignId))
-    .where(eq(candidateClips.id, id));
+  const row = await loadCandidateWithContext(db, id);
   if (!row) throw new ReviewError("not_found", `No candidate ${id}`);
   return row;
 }

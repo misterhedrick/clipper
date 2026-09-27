@@ -3,6 +3,7 @@ import type { Db } from "../../db/client.js";
 import { audit } from "../../db/audit.js";
 import { campaigns, creditLedger, sourceJobs, statusEvents, type FootageKind } from "../../db/schema.js";
 import { transition } from "../../db/transition.js";
+import { loadJobWithCampaign } from "../../db/helpers.js";
 import { validateCampaignConfig } from "../campaign-config/index.js";
 import { estimateCredits, lockBudget, usedToday } from "../credits/index.js";
 import { needsUpload } from "./upload.js";
@@ -50,11 +51,7 @@ export const MAX_SUBMIT_RETRIES = 3;
 export const submitTitle = (jobId: string) => `clipper:${jobId}`;
 
 async function loadJob(db: Db, jobId: string) {
-  const [row] = await db
-    .select({ job: sourceJobs, campaign: campaigns })
-    .from(sourceJobs)
-    .innerJoin(campaigns, eq(campaigns.id, sourceJobs.campaignId))
-    .where(eq(sourceJobs.id, jobId));
+  const row = await loadJobWithCampaign(db, jobId);
   if (!row) throw new SubmissionError("not_found", `No source job ${jobId}`);
   return row;
 }
