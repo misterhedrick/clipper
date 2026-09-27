@@ -121,6 +121,24 @@ describe.skipIf(!TEST_DATABASE_URL)("transition()", () => {
     ).resolves.toEqual({ from: "awaiting_review", to: "rejected" });
   });
 
+  it("lets the reject_failed_checks standing rule reject a clip, and nothing else", async () => {
+    const campaign = await insertCampaign(db, "c", "pending_confirmation");
+    const job = await insertSourceJob(db, campaign.id, "f", { status: "candidates_ready" });
+    const [clip] = await db
+      .insert(candidateClips)
+      .values({ sourceJobId: job.id, opusclipClipId: "p.c", status: "awaiting_review" })
+      .returning();
+    for (const to of ["approved", "needs_edit"] as const) {
+      const err = await rejection(transition(db, { entity: "candidate_clip", id: clip!.id, to, actor: OPERATOR_ACTOR, standingRule: "reject_failed_checks" }));
+      expect(err.code).toBe("human_only");
+    }
+    const err = await rejection(transition(db, { entity: "campaign", id: campaign.id, to: "active", actor: OPERATOR_ACTOR, standingRule: "reject_failed_checks" }));
+    expect(err.code).toBe("human_only");
+    await expect(
+      transition(db, { entity: "candidate_clip", id: clip!.id, to: "rejected", actor: OPERATOR_ACTOR, standingRule: "reject_failed_checks" }),
+    ).resolves.toEqual({ from: "awaiting_review", to: "rejected" });
+  });
+
   it("lets automation return a failed packaging run to approved, and nothing else", async () => {
     const campaign = await insertCampaign(db, "c", "active");
     const job = await insertSourceJob(db, campaign.id, "f", { status: "candidates_ready" });

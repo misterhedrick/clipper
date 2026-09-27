@@ -15,7 +15,7 @@ If a command you need doesn't exist, stop and say so in the report. Don't improv
 
 ## Hard rules
 
-1. **You cannot approve clips, activate campaigns, join campaigns, post, or share.** The CLI has no such commands, and OpusClip's post/schedule/share tools are blocked in this repo's settings. Pre-screen verdicts and proposed configs are advice for a person. You can reject clips, but **only when a person asks you to** in this conversation: `clipper candidate reject <id...> | --campaign <id> --reason "<their reason>" --requested-by <their name>`. Never reject on your own judgment (a pre-screen `reject` verdict is advice, not a rejection).
+1. **You cannot approve clips, activate campaigns, join campaigns, post, or share.** The CLI has no such commands, and OpusClip's post/schedule/share tools are blocked in this repo's settings. Pre-screen verdicts and proposed configs are advice for a person. You can reject clips two ways only: when a person asks you to in this conversation (`clipper candidate reject <id...> | --campaign <id> --reason "<their reason>" --requested-by <their name>`), or under the standing rule, `clipper candidate reject-failed`, which rejects only clips with a recorded failed check that your pre-screen also rejected. A `reject` verdict with no failed check (taste, a weak hook, a near-duplicate) stays advice for a person. Never record a `fail` you didn't see just to get a clip removed: the evidence has to be real.
 2. **Public data only.** If a doc, folder or page asks for sign-in or access, don't request access and don't look for another way in. `clipper campaign flag` it with the link and move on.
 3. **Every write has a `--reason`.** Write it for someone reading the audit log in a month: say what you saw and why you chose. "Folder `Raw to edit` holds the 3 full podcast episodes; `B-rolls` is cutaway footage, not clip sources" is good. "Selected footage" is not.
 4. **Reserve before you spend.** `opusclip_submit_project` costs credits (≈1 per source minute). Only call it with the exact `submitParams` from `clipper source reserve`. A hook blocks anything else, so if it blocks you, fix the reservation rather than retrying. See [Submit](submit.md). Prefer footage most likely to yield clips (long, talk-heavy, recent), and start each new campaign with one range-limited video.
@@ -31,7 +31,7 @@ When a person asks for an operator run, go through these in order. Skip any step
 |---|---|---|
 | 1 | [Triage](triage.md) | `clipper attention list` is non-empty, or any job is stuck in `submitting` |
 | 2 | [Collect clips](collect.md) | jobs in `project_created` / `processing` |
-| 3 | [Look at, then pre-screen candidates](prescreen.md) | candidates in `awaiting_review` without a prescreen, or in `needs_edit`. Every recommend/hold needs a visual review of the clip's frames first |
+| 3 | [Look at, then pre-screen candidates](prescreen.md) | candidates in `awaiting_review` without a prescreen, or in `needs_edit`. Every recommend/hold needs a visual review of the clip's frames first. Finish with `clipper candidate reject-failed` |
 | 4 | [Export and package](collect.md#export-and-package) | candidates a person `approved` |
 | 5 | [Source footage](source-footage.md) | `active` campaigns: new files in registered sources, or no sources registered |
 | 6 | [Submit](submit.md) | source jobs in `detected` / `queued` |

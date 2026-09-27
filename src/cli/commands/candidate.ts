@@ -6,6 +6,7 @@ import {
   recordEdit,
   recordVisualReview,
   rejectCandidates,
+  rejectFailedCandidates,
   setCaption,
   showCandidate,
   upsertCandidates,
@@ -17,8 +18,9 @@ import { recordExport } from "../../modules/packaging/index.js";
 import { positional, readJsonInput, readTextInput, requiredOption, UsageError, type Command, type CommandContext } from "../run.js";
 
 // There is deliberately no approve / needs-edit / post command here: those are
-// a reviewer's decisions, made in the review web app. `reject` is the one
-// exception, and only for a person who asked for it by name (--requested-by).
+// a reviewer's decisions, made in the review web app. Rejecting is the one
+// exception: for a person who asked for it by name (`reject --requested-by`),
+// or under the standing rule for clips with failed checks (`reject-failed`).
 
 const moduleCtx = (ctx: CommandContext) => ({ db: ctx.db(), actor: ctx.actor });
 
@@ -119,6 +121,16 @@ export const candidateCommands: Record<string, Command> = {
         requiredOption(ctx, "reason"),
         requiredOption(ctx, "requested-by"),
       );
+    },
+  },
+  "reject-failed": {
+    summary:
+      "Standing rule: reject every clip waiting on a decision that has a failed check AND your pre-screen verdict of reject. Held clips and taste-only rejects are left for a person. Run it after pre-screening.",
+    usage: "[--campaign <id>]",
+    options: { campaign: { type: "string" } },
+    run: async (ctx) => {
+      const campaignId = ctx.options.campaign ? (await resolveCampaign(ctx.db(), ctx.options.campaign as string)).id : undefined;
+      return rejectFailedCandidates(moduleCtx(ctx), { campaignId });
     },
   },
   "set-caption": {

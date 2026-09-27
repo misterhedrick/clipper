@@ -84,6 +84,7 @@ The playbook tells Claude what to do. These invariants make sure a mistake in fo
 7. **Public sources only.** Listing and submit commands fetch anonymously. A sign-in wall becomes a `needs_attention` reason, never an auth attempt.
 8. **Caption validation.** `clipper candidate set-caption` rejects a caption that's missing any of the campaign's required phrases, tags or disclosures. Claude drafts, code verifies.
 8a. **Look before vouching.** `clipper candidate prescreen` refuses a `recommend` or `hold` until the clip's current render has a visual review (`candidate frames` → Claude looks → `candidate visual-review`). The review must cover exactly the checks the clip data can't settle (the campaign's `review.requiredChecks`, on-screen text, overlays, aspect), each with evidence. A `fail` it records counts like any failed check: approving needs the reviewer's explicit override. An edit makes the review stale and sends those checks back to `manual_review_required`.
+8b. **Rejecting under a standing rule.** `clipper candidate reject-failed` rejects, without a per-clip request, only clips with a recorded `fail` **and** the operator's own pre-screen `reject` (decided 2026-09-27). `transition()` allows it through the named `reject_failed_checks` standing rule, which permits nothing but `candidate_clip → rejected`; the rule and the failed checks' evidence go into the status reason. Held clips and taste-only rejects stay with a person, and rejects are final.
 9. **Every write is audited.** Status changes write `status_events` (via `transition()`); other writes (classify, add footage, captions, …) write `audit_log` in the same transaction. CLI writes are attributed to `claude-operator`, web-app writes to `reviewer:<identity>`.
 
 ## `clipper` CLI contract
@@ -131,6 +132,7 @@ clipper candidate show <id>   (r) one candidate + visualChecks (the checks its v
 clipper candidate frames <id> [--out dir] [--every sec] [--at sec,...]   (r, local) preview → still frames + contact sheets on the operator's disk; in remote mode only the lookup goes to the app
 clipper candidate visual-review <id> --file review.json   record {framesChecked, summary, checks: {name: {result, evidence}}} for exactly visualChecks
 clipper candidate prescreen <id> --verdict <recommend|hold|reject> --notes "..."   advisory only; never approves; recommend/hold need a current visual review
+clipper candidate reject-failed [--campaign id]   standing rule: reject clips with a failed check AND a pre-screen reject; reports held clips with failures
 clipper candidate set-caption <id> --file caption.txt   validated against campaign requirements
 clipper candidate reject <id...> | --campaign <id> --reason "..." --requested-by <name>   only when a person asked: clips awaiting_review/needs_edit → rejected, requester recorded
 
