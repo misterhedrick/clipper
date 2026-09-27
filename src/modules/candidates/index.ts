@@ -449,10 +449,6 @@ export async function rejectFailedCandidates(ctx: CandidatesCtx, filter: { campa
     .where(and(inArray(candidateClips.status, [...REJECTABLE]), filter.campaignId ? eq(sourceJobs.campaignId, filter.campaignId) : undefined))
     .orderBy(asc(candidateClips.createdAt));
 
-  const failedChecks = (clip: CandidateRow) =>
-    Object.entries(clip.checkResults ?? {})
-      .filter(([, outcome]) => outcome === "fail")
-      .map(([name]) => name);
   const evidence = (clip: CandidateRow, name: string) => {
     if (name === "duration" && clip.durationMs !== null) return `duration (${Math.round(clip.durationMs / 1000)}s is outside the campaign's limits)`;
     const seen = currentVisualReview(clip)?.checks[name]?.evidence;
@@ -463,7 +459,7 @@ export async function rejectFailedCandidates(ctx: CandidatesCtx, filter: { campa
   const keptWithFailures: { id: string; failed: string[]; verdict: string | null }[] = [];
   await ctx.db.transaction(async (tx) => {
     for (const { clip } of rows) {
-      const failed = failedChecks(clip);
+      const failed = failedChecksOf(clip);
       if (!failed.length) continue;
       if (clip.prescreenVerdict !== "reject") {
         keptWithFailures.push({ id: clip.id, failed, verdict: clip.prescreenVerdict });
@@ -486,34 +482,131 @@ export async function rejectFailedCandidates(ctx: CandidatesCtx, filter: { campa
   return { rejected, count: rejected.length, keptWithFailures };
 }
 
+// --- automatic fixes ---------------------------------------------------------------
+
+/**
+ * opusclip_edit_clip ops the operator may use to fix a failed check on its own
+ * (standing rule, 2026-09-27). They correct or cut what's there; nothing that
+ * adds content (text overlays, emoji) or hides a problem (turning captions off).
+ */
+export const AUTO_FIX_OPS = [
+  "replace_phrase",
+  "delete_phrase",
+  "remove_filler_words",
+  "remove_pauses",
+  "trim_section",
+  "split_section",
+  "drop_section",
+  "reorder_sections",
+  "set_style",
+  "undo",
+] as const;
+
+/** Automatic fixes per clip; after that it's the reviewer's (or the reject rule's) call. */
+export const MAX_AUTO_FIXES = 2;
+
+const failedChecksOf = (clip: CandidateRow) =>
+  Object.entries(clip.checkResults ?? {})
+    .filter(([, outcome]) => outcome === "fail")
+    .map(([name]) => name);
+
+const autoFixCount = (clip: CandidateRow) => clip.editLog.filter((e) => e.fixes?.length).length;
+
+/** Why an automatic fix with these ops isn't allowed on this clip, or null when it is. */
+function autoFixRefusal(clip: CandidateRow, ops: unknown[]): string | null {
+  if (clip.status !== "awaiting_review") return `it's ${clip.status}; automatic fixes are only for clips awaiting review`;
+  if (!failedChecksOf(clip).length) return "it has no failed check to fix";
+  const bad = ops.map((o) => (o as { op?: unknown })?.op).filter((op) => !(AUTO_FIX_OPS as readonly unknown[]).includes(op));
+  if (bad.length) return `ops ${bad.map(String).join(", ")} aren't allowed in an automatic fix (allowed: ${AUTO_FIX_OPS.join(", ")})`;
+  if (autoFixCount(clip) >= MAX_AUTO_FIXES) return `it already had ${MAX_AUTO_FIXES} automatic fixes`;
+  return null;
+}
+
+export type EditGuardVerdict = { allow: boolean; reason: string; candidateId?: string };
+
+/**
+ * The PreToolUse check behind .claude/hooks/guard-opusclip-edit.sh. Allows an
+ * opusclip_edit_clip call when it's a dry run, when a reviewer marked the clip
+ * needs_edit, or under the fix rule: a clip awaiting review with a failed check,
+ * only fixing ops, at most MAX_AUTO_FIXES times. Anything else is refused.
+ */
+export async function guardEdit(db: Db, payloadText: string): Promise<EditGuardVerdict> {
+  let input: { projectId?: unknown; clipId?: unknown; ops?: unknown; dryRun?: unknown } | undefined;
+  try {
+    input = (JSON.parse(payloadText) as { tool_input?: typeof input })?.tool_input;
+  } catch {
+    return { allow: false, reason: "Blocked: hook payload isn't JSON." };
+  }
+  if (!input || typeof input !== "object") return { allow: false, reason: "Blocked: no tool_input in hook payload." };
+  if (input.dryRun === true) return { allow: true, reason: "Allowed: dry run changes nothing." };
+  if (typeof input.clipId !== "string" || !Array.isArray(input.ops)) return { allow: false, reason: "Blocked: expected clipId and ops." };
+  const [row] = await db
+    .select({ clip: candidateClips, job: sourceJobs })
+    .from(candidateClips)
+    .innerJoin(sourceJobs, eq(sourceJobs.id, candidateClips.sourceJobId))
+    .where(eq(candidateClips.opusclipClipId, input.clipId));
+  if (!row) return { allow: false, reason: `Blocked: clip ${input.clipId} isn't a stored candidate.` };
+  if (row.job.opusclipProjectId !== input.projectId) return { allow: false, reason: `Blocked: clip ${input.clipId} belongs to project ${row.job.opusclipProjectId}.`, candidateId: row.clip.id };
+  if (row.clip.status === "needs_edit") return { allow: true, reason: "Allowed: a reviewer asked for edits (needs_edit).", candidateId: row.clip.id };
+  const refusal = autoFixRefusal(row.clip, input.ops);
+  if (refusal) return { allow: false, reason: `Blocked: can't edit candidate ${row.clip.id}: ${refusal}.`, candidateId: row.clip.id };
+  return { allow: true, reason: `Allowed: automatic fix of ${failedChecksOf(row.clip).join(", ")}.`, candidateId: row.clip.id };
+}
+
 /**
  * Logs an `opusclip_edit_clip` call the operator made because a reviewer asked
  * for it, and hands the clip back to the reviewer (needs_edit → awaiting_review).
  */
-export async function recordEdit(ctx: CandidatesCtx, id: string, ops: unknown, reason: string) {
+export async function recordEdit(ctx: CandidatesCtx, id: string, ops: unknown, reason: string, fixes: string[] = []) {
   if (!Array.isArray(ops) || ops.length === 0) {
     throw new CandidatesError("invalid_argument", "ops must be the non-empty ops array passed to opusclip_edit_clip");
   }
-  if (!reason.trim()) throw new CandidatesError("invalid_argument", "--reason is required: the reviewer's note and what you changed");
+  if (!reason.trim()) throw new CandidatesError("invalid_argument", "--reason is required: what was wrong and what you changed");
   const { clip } = await loadCandidate(ctx.db, id);
-  if (clip.status !== "needs_edit") {
-    throw new CandidatesError("invalid_state", `Candidate ${id} is ${clip.status}; edits are recorded only for candidates a reviewer marked needs_edit`);
-  }
-  const entry = { ops, reason: reason.trim(), at: (ctx.now?.() ?? new Date()).toISOString() };
-  const editLog = [...clip.editLog, entry];
+  const at = (ctx.now?.() ?? new Date()).toISOString();
   // The render changed, so what the last visual review saw no longer holds: its checks go back to the reviewer.
   const checkResults: CheckResults = { ...(clip.checkResults ?? {}) };
   for (const name of Object.keys(clip.visualReview?.checks ?? {})) checkResults[name] = "manual_review_required";
-  await transition(ctx.db, {
-    entity: "candidate_clip",
-    id,
-    to: "awaiting_review",
-    actor: ctx.actor,
-    reason: `edited as requested: ${entry.reason}`,
-    expectFrom: ["needs_edit"],
-    set: { editLog, checkResults, visualReview: null },
+
+  if (clip.status === "needs_edit") {
+    const entry = { ops, reason: reason.trim(), at };
+    const editLog = [...clip.editLog, entry];
+    await transition(ctx.db, {
+      entity: "candidate_clip",
+      id,
+      to: "awaiting_review",
+      actor: ctx.actor,
+      reason: `edited as requested: ${entry.reason}`,
+      expectFrom: ["needs_edit"],
+      set: { editLog, checkResults, visualReview: null },
+    });
+    return { id, status: "awaiting_review" as const, edit: entry, edits: editLog.length };
+  }
+
+  // Standing rule (2026-09-27): the operator may fix a clip's failed checks without being asked.
+  if (!fixes.length) {
+    throw new CandidatesError(
+      "invalid_state",
+      `Candidate ${id} is ${clip.status}; record an edit either for a reviewer's needs_edit, or as an automatic fix naming the failed checks it fixes (--fixes)`,
+    );
+  }
+  const refusal = autoFixRefusal(clip, ops);
+  if (refusal) throw new CandidatesError("invalid_state", `Can't record an automatic fix on ${id}: ${refusal}`);
+  const failed = failedChecksOf(clip);
+  const notFailed = fixes.filter((n) => !failed.includes(n));
+  if (notFailed.length) throw new CandidatesError("invalid_argument", `--fixes names checks that didn't fail: ${notFailed.join(", ")} (failed: ${failed.join(", ")})`);
+  for (const name of fixes) checkResults[name] = "manual_review_required";
+  const entry = { ops, reason: reason.trim(), at, fixes };
+  const editLog = [...clip.editLog, entry];
+  return ctx.db.transaction(async (tx) => {
+    // The old verdict described the old render; the fixed clip gets looked at and pre-screened afresh.
+    await tx
+      .update(candidateClips)
+      .set({ editLog, checkResults, visualReview: null, prescreenVerdict: null, prescreenNotes: null, prescreenedAt: null })
+      .where(eq(candidateClips.id, id));
+    await audit(tx, { entityType: "candidate_clip", entityId: id, action: "auto_fix", actor: ctx.actor, details: { ...entry, previousVerdict: clip.prescreenVerdict } });
+    return { id, status: clip.status, edit: entry, edits: editLog.length, autoFixes: autoFixCount(clip) + 1 };
   });
-  return { id, status: "awaiting_review" as const, edit: entry, edits: editLog.length };
 }
 
 // --- visual review ------------------------------------------------------------------
