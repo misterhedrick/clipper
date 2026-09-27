@@ -15,6 +15,7 @@ Revised 2026-09-23: the database moved from Render Postgres to Supabase to keep 
 ## What's live (2026-09-23)
 
 - **Render:** `clipper-review` (free, Virginia), https://clipper-review.onrender.com, deploying `main`.
+  The Render workspace ("My Workspace") also runs `qrps-paper-automation-worker` from the separate `options` repo. Clipper sessions must never act on it: `.claude/hooks/guard-render-scope.sh` blocks any Render connector call that names it. Clipper's only service is `clipper-review` (`srv-dapjuq0u01pc73cteut0`).
 - **Supabase:** project `clipper` (ref `yarntsabsnlzwpzlfiyn`, us-east-1, free) in the Tablemate org. Pooler host `aws-0-us-east-1.pooler.supabase.com`.
 - **Database login:** the app connects as **`clipper_app`**, a dedicated role, not `postgres`. It's not a superuser, can't bypass row-level security, and can only create objects in this database and its `public` schema. Its tables get no grants for Supabase's Data API roles (`anon`, `authenticated`; checked), so they aren't reachable through the project's REST API. The pooler username is `clipper_app.yarntsabsnlzwpzlfiyn`. The password lives only in Render's environment. To rotate it: `alter role clipper_app password '…'` in Supabase, then update `DATABASE_URL` on Render.
 - **CA:** `DATABASE_CA_CERT` holds Supabase Root 2021 CA (valid to 2031-04-26; SHA-256 `80:70:25:AD:…:CA:FA`).
