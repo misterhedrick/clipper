@@ -33,6 +33,8 @@ With the checks settled, decide the verdict. Use OpusClip's title, description, 
 
 `clipper candidate prescreen <id> --verdict recommend|hold|reject --notes "..."`
 
+When every candidate is pre-screened, run `clipper candidate reject-failed`. It rejects, for good, each clip that has a failed check (code's, or yours with evidence) **and** your `reject` verdict, with the failed checks and evidence as the reason. It leaves alone a held clip with a failed check (waiting on a fix) and a `reject` with no failed check (a taste call); those stay for a person. So record `fail` only for what you actually saw, and to reject a clip whose checks all passed, say why in the verdict and leave it to the reviewer. Report the count, and list `keptWithFailures` only if a held clip's fix is waiting on the reviewer.
+
 ## 3. Draft the caption (for `recommend` and `hold`)
 
 Build it from the campaign config:

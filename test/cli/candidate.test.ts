@@ -269,6 +269,44 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper candidate …", () => {
       expect(await out("candidate", "prescreen", id, "--verdict", "recommend", "--notes", "x")).toMatchObject({ error: { code: "visual_review_required" } });
     });
 
+    it("reject-failed rejects only clips with a failed check that the pre-screen also rejects", async () => {
+      const c1 = id;
+      const c2 = (await clip("P123.c2")).id;
+      const c3 = (await clip("P123.c3")).id; // 9 s: fails duration
+      // c1: visual fail + reject verdict → rejected. c2: visual fail but held for a fix → kept.
+      for (const c of [c1, c2]) {
+        stdin = review(allPass);
+        await out("candidate", "visual-review", c, "--file", "-");
+      }
+      await out("candidate", "prescreen", c1, "--verdict", "reject", "--notes", "watermark");
+      await out("candidate", "prescreen", c2, "--verdict", "hold", "--notes", "fixable");
+      // c3: failed duration but not pre-screened yet → kept until the pre-screen agrees.
+      let res = await out("candidate", "reject-failed");
+      expect(res).toMatchObject({ count: 1, rejected: [{ id: c1, failed: ["no_other_brand_watermarks"] }] });
+      expect(res.keptWithFailures).toEqual(
+        expect.arrayContaining([
+          { id: c2, failed: ["no_other_brand_watermarks"], verdict: "hold" },
+          { id: c3, failed: ["duration"], verdict: null },
+        ]),
+      );
+      expect(await clip("P123.c1")).toMatchObject({ status: "rejected", reviewNotes: expect.stringContaining("Creator's channel logo") });
+      const [ev] = await db.select().from(statusEvents).where(and(eq(statusEvents.entityId, c1), eq(statusEvents.toStatus, "rejected")));
+      expect(ev).toMatchObject({ actor: "claude-operator", reason: expect.stringContaining("standing rule: failed checks + pre-screen reject") });
+
+      await out("candidate", "prescreen", c3, "--verdict", "reject", "--notes", "too short");
+      res = await out("candidate", "reject-failed");
+      expect(res).toMatchObject({ count: 1, rejected: [{ id: c3, reason: expect.stringContaining("duration (9s is outside") }] });
+      expect(await clip("P123.c2")).toMatchObject({ status: "awaiting_review" });
+      // Nothing left to do: running it again changes nothing.
+      expect(await out("candidate", "reject-failed")).toMatchObject({ count: 0 });
+    });
+
+    it("a reject verdict without a failed check is left for a person", async () => {
+      await out("candidate", "prescreen", id, "--verdict", "reject", "--notes", "boring");
+      expect(await out("candidate", "reject-failed")).toMatchObject({ count: 0 });
+      expect(await clip("P123.c1")).toMatchObject({ status: "awaiting_review" });
+    });
+
     it("frames never runs over the operator endpoint", async () => {
       const res = await run(["candidate", "frames", id], { db, remote: true });
       expect(res.output).toMatchObject({ error: { code: "usage", message: expect.stringContaining("operator's machine") } });

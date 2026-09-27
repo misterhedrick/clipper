@@ -102,6 +102,21 @@ const onPersonsRequest: { [E in EntityType]: readonly StatusOf[E][] } = {
   candidate_clip: ["rejected"],
 };
 
+/**
+ * Standing rules a person set once, under which automation may make a
+ * human-only move without being asked each time. The caller checks the rule's
+ * conditions; the rule's name goes into the status_events reason.
+ */
+export const STANDING_RULES = {
+  /** A clip with a recorded failed check that the operator's own pre-screen also rejects (decided 2026-09-27). */
+  reject_failed_checks: "standing rule: failed checks + pre-screen reject",
+} as const;
+export type StandingRule = keyof typeof STANDING_RULES;
+
+const byStandingRule: { [R in StandingRule]: { entity: EntityType; to: string } } = {
+  reject_failed_checks: { entity: "candidate_clip", to: "rejected" },
+};
+
 /** Human actors are recorded as `reviewer:<identity>`. Anything else is automation. */
 export const isHumanActor = (actor: string) => /^reviewer:\S+$/.test(actor);
 
@@ -132,6 +147,8 @@ export type TransitionInput<E extends EntityType> = {
   expectFrom?: readonly StatusOf[E][];
   /** The person who asked automation to make this move; see `onPersonsRequest`. */
   requestedBy?: string;
+  /** The standing rule this move is made under; see `STANDING_RULES`. */
+  standingRule?: StandingRule;
 };
 
 type Executor = Pick<Db, "transaction">;
@@ -167,7 +184,9 @@ export async function transition<E extends EntityType>(
     }
     const revert = ((humanOnlyReverts[entity] as Record<string, readonly string[] | undefined>)[to] ?? []).includes(from);
     const requested = !!input.requestedBy?.trim() && (onPersonsRequest[entity] as readonly string[]).includes(to);
-    if ((humanOnly[entity] as readonly string[]).includes(to) && !revert && !requested && !isHumanActor(actor)) {
+    const rule = input.standingRule ? byStandingRule[input.standingRule] : undefined;
+    const byRule = !!rule && rule.entity === entity && rule.to === to;
+    if ((humanOnly[entity] as readonly string[]).includes(to) && !revert && !requested && !byRule && !isHumanActor(actor)) {
       throw new TransitionError("human_only", `only a reviewer can move a ${entity} to ${to} (actor: ${actor})`);
     }
 
