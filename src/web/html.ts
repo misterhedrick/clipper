@@ -65,7 +65,7 @@ export function page(opts: { title: string; reviewer?: string; flash?: { ok?: st
 <title>${opts.title} · Clipper review</title>
 <style>
   :root { --bg: #f8f6f3; --fg: #1f1f1f; --muted: #6b6b6b; --line: #e0dcd8; --card: #fff; --accent: #3b82f6; --accent-dark: #1e40af;
-          --ok: #059669; --ok-bg: #ecfdf5; --bad: #dc2626; --bad-bg: #fef2f2; --warn: #d97706; --warn-bg: #fffbeb; 
+          --ok: #059669; --ok-bg: #ecfdf5; --bad: #dc2626; --bad-bg: #fef2f2; --warn: #d97706; --warn-bg: #fffbeb;
           --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05); --shadow-sm: 0 1px 2px rgba(0,0,0,0.05); }
   @media (prefers-color-scheme: dark) {
     :root { --bg: #1a1a1a; --fg: #f5f5f5; --muted: #9ca3af; --line: #3f3f3f; --card: #262626; --accent: #60a5fa; --accent-dark: #3b82f6;
@@ -84,9 +84,9 @@ export function page(opts: { title: string; reviewer?: string; flash?: { ok?: st
   nav form { margin-left: auto; }
   a { color: var(--accent); text-decoration: none; transition: color 0.2s; }
   a:hover { color: var(--accent-dark); text-decoration: underline; }
-  h1 { font-size: 1.5rem; font-weight: 700; margin: 12px 0 16px; letter-spacing: -0.5px; } 
+  h1 { font-size: 1.5rem; font-weight: 700; margin: 12px 0 16px; letter-spacing: -0.5px; }
   @media (min-width: 640px) { h1 { font-size: 2rem; margin: 16px 0 20px; } }
-  h2 { font-size: 1.1rem; font-weight: 600; margin: 16px 0 12px; letter-spacing: -0.25px; } 
+  h2 { font-size: 1.1rem; font-weight: 600; margin: 16px 0 12px; letter-spacing: -0.25px; }
   @media (min-width: 640px) { h2 { font-size: 1.25rem; margin: 20px 0 12px; } }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin: 10px 0; box-shadow: var(--shadow); transition: box-shadow 0.2s, transform 0.2s; }
   .card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.12), 0 6px 16px rgba(0,0,0,0.08); }
@@ -97,8 +97,8 @@ export function page(opts: { title: string; reviewer?: string; flash?: { ok?: st
   .muted { color: var(--muted); }
   .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: .8rem; font-weight: 600; margin: 4px 6px 4px 0; letter-spacing: 0.3px; }
   @media (min-width: 640px) { .badge { padding: 4px 12px; font-size: .85rem; } }
-  .ok { color: #fff; background: linear-gradient(135deg, var(--ok), #059669); } 
-  .bad { color: #fff; background: linear-gradient(135deg, var(--bad), #b91c1c); } 
+  .ok { color: #fff; background: linear-gradient(135deg, var(--ok), #059669); }
+  .bad { color: #fff; background: linear-gradient(135deg, var(--bad), #b91c1c); }
   .warn { color: #000; background: linear-gradient(135deg, var(--warn), #d97706); }
   .flash { padding: 12px 16px; border-radius: 8px; margin: 10px 0; font-size: 14px; font-weight: 500; border-left: 4px solid; }
   .flash.ok { border-color: var(--ok); background: var(--ok-bg); color: var(--ok); }
@@ -117,7 +117,7 @@ export function page(opts: { title: string; reviewer?: string; flash?: { ok?: st
   textarea, input, select { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--fg); font-size: 16px; transition: border-color 0.2s, box-shadow 0.2s; }
   textarea:focus, input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
   @media (min-width: 640px) { textarea, input, select { font-size: 15px; padding: 11px 13px; } }
-  label { display: block; margin: 10px 0 6px; font-weight: 600; font-size: 14px; letter-spacing: 0.25px; } 
+  label { display: block; margin: 10px 0 6px; font-weight: 600; font-size: 14px; letter-spacing: 0.25px; }
   @media (min-width: 640px) { label { font-size: 15px; margin: 12px 0 6px; } }
   label.check { font-weight: normal; display: flex; gap: 10px; align-items: center; margin: 8px 0; }
   label.check input { width: auto; }
@@ -142,8 +142,7 @@ export function page(opts: { title: string; reviewer?: string; flash?: { ok?: st
   @media (min-width: 640px) { details { border-radius: 8px; padding: 14px; } }
   summary { cursor: pointer; font-weight: 600; color: var(--accent); user-select: none; }
   summary:hover { color: var(--accent-dark); }
-
-
+</style>
 </head>
 <body>
 ${nav}
