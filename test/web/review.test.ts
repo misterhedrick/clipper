@@ -153,6 +153,29 @@ describe.skipIf(!TEST_DATABASE_URL)("review web app", () => {
       const list = await app.inject({ method: "GET", url: "/campaigns", headers: { cookie } });
       expect(list.body).toContain("Pending &lt;b&gt;campaign&lt;/b&gt;");
     });
+
+    it("shows the operator's visual review evidence, only for the render it describes", async () => {
+      const { cookie } = await login();
+      const visualReview = {
+        at: "2026-09-27T18:00:00.000Z",
+        actor: "claude-operator",
+        framesChecked: 16,
+        summary: "Home <b>shown</b> throughout",
+        edits: 0,
+        checks: { aspect_ratio: { result: "pass" as const, evidence: "All frames 9:16" } },
+      };
+      await db.update(candidateClips).set({ visualReview }).where(eq(candidateClips.id, candidateId));
+      const page = async () => (await app.inject({ method: "GET", url: `/candidates/${candidateId}`, headers: { cookie } })).body;
+      let body = await page();
+      expect(body).toContain("All frames 9:16");
+      expect(body).toContain("Home &lt;b&gt;shown&lt;/b&gt; throughout");
+      expect(body).toContain("16 frames");
+
+      await db.update(candidateClips).set({ editLog: [{ ops: [{}], reason: "x", at: "2026-09-27T19:00:00.000Z" }] }).where(eq(candidateClips.id, candidateId));
+      body = await page();
+      expect(body).not.toContain("All frames 9:16");
+      expect(body).toContain("out of date: the clip was edited since");
+    });
   });
 
   describe("campaign confirmation", () => {

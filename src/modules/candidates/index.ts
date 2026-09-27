@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { z } from "zod";
 import type { Db } from "../../db/client.js";
 import { audit } from "../../db/audit.js";
 import {
@@ -8,14 +9,23 @@ import {
   candidateClips,
   sourceJobs,
   statusEvents,
+  CHECK_OUTCOMES,
   type CandidateClipStatus,
   type PrescreenVerdict,
   type SourceJobStatus,
+  type VisualReview,
 } from "../../db/schema.js";
 import { isHumanActor, recordCreated, transition } from "../../db/transition.js";
 import { loadJobWithCampaign, loadCandidateWithContext } from "../../db/helpers.js";
 import { validateCampaignConfig, type CampaignConfig } from "../campaign-config/index.js";
-import { CAPTION_CHECK, runObjectiveChecks, validateCaption, type CaptionIssue, type CheckResults } from "../compliance/index.js";
+import {
+  CAPTION_CHECK,
+  runObjectiveChecks,
+  validateCaption,
+  visualCheckNames,
+  type CaptionIssue,
+  type CheckResults,
+} from "../compliance/index.js";
 import { classifyStage, OpusClipParseError, parseOpusClipList, type OpusClip } from "./opusclip.js";
 
 export { parseOpusClipList, classifyStage, OpusClipParseError } from "./opusclip.js";
@@ -26,7 +36,7 @@ export { parseOpusClipList, classifyStage, OpusClipParseError } from "./opusclip
 // any non-reviewer actor anyway. Rejecting is the one exception: a reviewer can,
 // and the operator can when a named person asks for it (rejectCandidates).
 
-export type CandidatesErrorCode = "not_found" | "invalid_argument" | "invalid_state" | "conflict" | "caption_invalid";
+export type CandidatesErrorCode = "not_found" | "invalid_argument" | "invalid_state" | "conflict" | "caption_invalid" | "visual_review_required";
 
 export class CandidatesError extends Error {
   constructor(
@@ -90,6 +100,23 @@ const fields = (c: OpusClip) => ({
   opusclipSubScores: c.subScores ?? null,
 });
 
+/** A visual review describes the render it looked at; any edit since makes it stale. */
+const currentVisualReview = (clip: CandidateRow): VisualReview | null =>
+  clip.visualReview && clip.visualReview.edits === clip.editLog.length ? clip.visualReview : null;
+
+/** Results a refresh must not reset: the caption check, and a current visual review's checks. */
+function keptResults(prior: CandidateRow): CheckResults {
+  const kept: CheckResults = {};
+  const caption = prior.checkResults?.[CAPTION_CHECK];
+  if (caption) kept[CAPTION_CHECK] = caption;
+  const visual = currentVisualReview(prior);
+  for (const name of Object.keys(visual?.checks ?? {})) {
+    const outcome = prior.checkResults?.[name];
+    if (outcome) kept[name] = outcome;
+  }
+  return kept;
+}
+
 const summarizeChecks = (checks: CheckResults) =>
   Object.entries(checks)
     .map(([k, v]) => `${k}=${v}`)
@@ -143,8 +170,8 @@ export async function upsertCandidates(ctx: CandidatesCtx, jobId: string, input:
         if (prior.sourceJobId !== job.id) {
           throw new CandidatesError("conflict", `Clip ${clip.clipId} is already stored for another source job (${prior.sourceJobId})`);
         }
-        // Keep what later steps established (a validated caption) over the fresh default.
-        const merged: CheckResults = { ...checks, ...(prior.checkResults?.[CAPTION_CHECK] ? { [CAPTION_CHECK]: prior.checkResults[CAPTION_CHECK] } : {}) };
+        // Keep what later steps established (a validated caption, a current visual review) over the fresh defaults.
+        const merged: CheckResults = { ...checks, ...keptResults(prior) };
         const [row] = await tx
           .update(candidateClips)
           .set({ ...fields(clip), checkResults: merged })
@@ -230,7 +257,7 @@ async function advanceJob(
 
 // --- list ------------------------------------------------------------------------
 
-export async function listCandidates(db: Db, filter: { status?: string; campaignId?: string; jobId?: string } = {}) {
+export async function listCandidates(db: Db, filter: { status?: string; campaignId?: string; jobId?: string; id?: string } = {}) {
   if (filter.status && !(CANDIDATE_CLIP_STATUSES as readonly string[]).includes(filter.status)) {
     throw new CandidatesError("invalid_argument", `Unknown status ${filter.status}; one of ${CANDIDATE_CLIP_STATUSES.join(", ")}`);
   }
@@ -244,6 +271,7 @@ export async function listCandidates(db: Db, filter: { status?: string; campaign
         filter.status ? eq(candidateClips.status, filter.status as CandidateClipStatus) : undefined,
         filter.campaignId ? eq(sourceJobs.campaignId, filter.campaignId) : undefined,
         filter.jobId ? eq(candidateClips.sourceJobId, filter.jobId) : undefined,
+        filter.id ? eq(candidateClips.id, filter.id) : undefined,
       ),
     )
     .orderBy(asc(candidateClips.createdAt));
@@ -267,12 +295,28 @@ export async function listCandidates(db: Db, filter: { status?: string; campaign
       thumbnailUrl: clip.thumbnailUrl,
       checkResults: clip.checkResults,
       prescreen: clip.prescreenVerdict ? { verdict: clip.prescreenVerdict, notes: clip.prescreenNotes, at: clip.prescreenedAt } : null,
+      visualReview: currentVisualReview(clip),
       caption: clip.caption,
       reviewNotes: clip.reviewNotes,
       edits: clip.editLog.length,
       exportUrl: clip.exportUrl,
     })),
   };
+}
+
+/**
+ * One candidate, as `listCandidates` describes it, plus the checks its visual
+ * review has to cover (empty when the campaign has no confirmed config).
+ */
+export async function showCandidate(db: Db, id: string) {
+  if (!z.uuid().safeParse(id).success) throw new CandidatesError("invalid_argument", `${id} isn't a candidate ID`);
+  const [candidate] = (await listCandidates(db, { id })).candidates;
+  if (!candidate) throw new CandidatesError("not_found", `No candidate ${id}`);
+  const { clip, campaign } = await loadCandidate(db, id);
+  const visualChecks = campaign.configConfirmedAt
+    ? visualCheckNames(runObjectiveChecks({ durationMs: clip.durationMs ?? undefined }, confirmedConfig(campaign)))
+    : [];
+  return { ...candidate, visualChecks };
 }
 
 // --- operator's advisory work ------------------------------------------------------
@@ -286,6 +330,14 @@ export async function prescreenCandidate(ctx: CandidatesCtx, id: string, verdict
   const { clip } = await loadCandidate(ctx.db, id);
   if (clip.status !== "awaiting_review") {
     throw new CandidatesError("invalid_state", `Candidate ${id} is ${clip.status}; only awaiting_review candidates are pre-screened`);
+  }
+  // Recommending or holding a clip vouches for what's on screen, so it needs a look at
+  // this render's frames first. A reject needs no look (a failed duration check is enough).
+  if (verdict !== "reject" && !currentVisualReview(clip)) {
+    throw new CandidatesError(
+      "visual_review_required",
+      `Candidate ${id} has no visual review${clip.visualReview ? " of its current render (it was edited since)" : ""}. Run \`clipper candidate frames ${id}\`, look at the frames, record \`clipper candidate visual-review ${id}\`, then pre-screen.`,
+    );
   }
   const at = ctx.now?.() ?? new Date();
   return ctx.db.transaction(async (tx) => {
@@ -396,6 +448,9 @@ export async function recordEdit(ctx: CandidatesCtx, id: string, ops: unknown, r
   }
   const entry = { ops, reason: reason.trim(), at: (ctx.now?.() ?? new Date()).toISOString() };
   const editLog = [...clip.editLog, entry];
+  // The render changed, so what the last visual review saw no longer holds: its checks go back to the reviewer.
+  const checkResults: CheckResults = { ...(clip.checkResults ?? {}) };
+  for (const name of Object.keys(clip.visualReview?.checks ?? {})) checkResults[name] = "manual_review_required";
   await transition(ctx.db, {
     entity: "candidate_clip",
     id,
@@ -403,7 +458,81 @@ export async function recordEdit(ctx: CandidatesCtx, id: string, ops: unknown, r
     actor: ctx.actor,
     reason: `edited as requested: ${entry.reason}`,
     expectFrom: ["needs_edit"],
-    set: { editLog },
+    set: { editLog, checkResults, visualReview: null },
   });
   return { id, status: "awaiting_review" as const, edit: entry, edits: editLog.length };
+}
+
+// --- visual review ------------------------------------------------------------------
+
+const visualReviewSchema = z.strictObject({
+  framesChecked: z.number().int().positive(),
+  summary: z.string().trim().min(1),
+  checks: z.record(
+    z.string(),
+    z.strictObject({ result: z.enum(CHECK_OUTCOMES), evidence: z.string().trim().min(1) }),
+  ),
+});
+
+export type VisualReviewInput = z.infer<typeof visualReviewSchema>;
+
+/**
+ * Records what the operator saw in a clip's frames (`candidate frames`): a result
+ * and evidence for every check the clip data couldn't settle, and nothing else.
+ * Duration and the caption stay code's; a check that still can't be judged from
+ * frames stays `manual_review_required`, with evidence saying why. A failed check
+ * then needs the reviewer's explicit override to approve, as any failed check does.
+ */
+export async function recordVisualReview(ctx: CandidatesCtx, id: string, input: unknown) {
+  const parsed = visualReviewSchema.safeParse(input);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0]!;
+    throw new CandidatesError("invalid_argument", `Visual review: ${issue.path.join(".") || "(root)"}: ${issue.message}`);
+  }
+  const review = parsed.data;
+  const { clip, campaign } = await loadCandidate(ctx.db, id);
+  if (clip.status !== "awaiting_review" && clip.status !== "needs_edit") {
+    throw new CandidatesError("invalid_state", `Candidate ${id} is ${clip.status}; visual reviews are recorded only before a person decides (awaiting_review or needs_edit)`);
+  }
+  const config = confirmedConfig(campaign);
+  const expected = visualCheckNames(runObjectiveChecks({ durationMs: clip.durationMs ?? undefined }, config));
+  const given = Object.keys(review.checks);
+  const missing = expected.filter((n) => !given.includes(n));
+  const unknown = given.filter((n) => !expected.includes(n));
+  if (missing.length || unknown.length) {
+    throw new CandidatesError(
+      "invalid_argument",
+      [
+        missing.length ? `missing ${missing.join(", ")}` : "",
+        unknown.length ? `not a visual check here: ${unknown.join(", ")} (duration and the caption are checked by code)` : "",
+      ]
+        .filter(Boolean)
+        .join("; "),
+      { expected },
+    );
+  }
+
+  const record: VisualReview = {
+    at: (ctx.now?.() ?? new Date()).toISOString(),
+    actor: ctx.actor,
+    framesChecked: review.framesChecked,
+    summary: review.summary,
+    edits: clip.editLog.length,
+    checks: review.checks,
+  };
+  const checkResults: CheckResults = { ...(clip.checkResults ?? {}) };
+  for (const [name, { result }] of Object.entries(review.checks)) checkResults[name] = result;
+  const failed = Object.entries(review.checks).filter(([, c]) => c.result === "fail").map(([n]) => n);
+
+  return ctx.db.transaction(async (tx) => {
+    await tx.update(candidateClips).set({ visualReview: record, checkResults }).where(eq(candidateClips.id, id));
+    await audit(tx, {
+      entityType: "candidate_clip",
+      entityId: id,
+      action: "visual_review",
+      actor: ctx.actor,
+      details: { ...record, previous: clip.visualReview },
+    });
+    return { id, status: clip.status, failed, checkResults, visualReview: record };
+  });
 }

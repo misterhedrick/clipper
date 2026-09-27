@@ -134,6 +134,8 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper candidate …", () => {
     });
 
     it("prescreen records an advisory verdict and changes no status", async () => {
+      stdin = JSON.stringify({ framesChecked: 20, summary: "Portrait gameplay", checks: { aspect_ratio: { result: "pass", evidence: "9:16 frames" } } });
+      await out("candidate", "visual-review", id, "--file", "-");
       expect(await out("candidate", "prescreen", id, "--verdict", "recommend", "--notes", "Clutch round, on-brief")).toMatchObject({
         status: "awaiting_review",
         prescreen: { verdict: "recommend" },
@@ -188,6 +190,88 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper candidate …", () => {
       for (const cmd of ["approve", "reject", "needs-edit", "post"]) {
         expect(await out("candidate", cmd, id)).toMatchObject({ error: { code: "usage" } });
       }
+    });
+  });
+
+  describe("visual review", () => {
+    let id: string;
+    const review = (checks: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+      JSON.stringify({ framesChecked: 18, summary: "Home shown from 0:03; BOXABL sign at 0:21", checks, ...extra });
+    const allPass = {
+      aspect_ratio: { result: "pass", evidence: "Every frame is 9:16" },
+      required_on_screen_text: { result: "pass", evidence: "BOXABL sign at 0:21" },
+      no_other_brand_watermarks: { result: "fail", evidence: "Creator's channel logo bottom-left 0:00-0:03" },
+    };
+    beforeEach(async () => {
+      const cfg = validConfig();
+      cfg.requirements.requiredOnScreenText = ["BOXABL"];
+      cfg.review.requiredChecks = ["caption_compliance", "no_other_brand_watermarks"];
+      const [row] = await db.select({ campaignId: sourceJobs.campaignId }).from(sourceJobs).where(eq(sourceJobs.id, jobId));
+      await db.update(campaigns).set({ config: cfg as never }).where(eq(campaigns.id, row!.campaignId));
+      await upsert(fixture);
+      id = (await clip("P123.c1")).id;
+    });
+
+    it("show lists the checks a visual review must cover (never duration or the caption)", async () => {
+      expect(await out("candidate", "show", id)).toMatchObject({
+        id,
+        opusclipClipId: "P123.c1",
+        visualReview: null,
+        visualChecks: ["aspect_ratio", "required_on_screen_text", "no_other_brand_watermarks"],
+      });
+      expect(await out("candidate", "show", "nope")).toMatchObject({ error: { code: "invalid_argument" } });
+    });
+
+    it("records a result and evidence for exactly the visual checks", async () => {
+      stdin = review({ aspect_ratio: allPass.aspect_ratio });
+      expect(await out("candidate", "visual-review", id, "--file", "-")).toMatchObject({
+        error: { code: "invalid_argument", message: expect.stringContaining("missing required_on_screen_text, no_other_brand_watermarks") },
+      });
+      stdin = review({ ...allPass, duration: { result: "pass", evidence: "looks fine" } });
+      expect(await out("candidate", "visual-review", id, "--file", "-")).toMatchObject({
+        error: { code: "invalid_argument", message: expect.stringContaining("not a visual check here: duration") },
+      });
+      stdin = review({ ...allPass, aspect_ratio: { result: "pass", evidence: " " } });
+      expect(await out("candidate", "visual-review", id, "--file", "-")).toMatchObject({ error: { code: "invalid_argument" } });
+
+      stdin = review(allPass);
+      expect(await out("candidate", "visual-review", id, "--file", "-")).toMatchObject({ status: "awaiting_review", failed: ["no_other_brand_watermarks"] });
+      expect(await clip("P123.c1")).toMatchObject({
+        status: "awaiting_review",
+        checkResults: { duration: "pass", aspect_ratio: "pass", required_on_screen_text: "pass", no_other_brand_watermarks: "fail", caption_compliance: "manual_review_required" },
+        visualReview: { framesChecked: 18, actor: "claude-operator", edits: 0, checks: { no_other_brand_watermarks: { evidence: expect.stringContaining("channel logo") } } },
+      });
+      expect(await db.select().from(auditLog).where(eq(auditLog.action, "visual_review"))).toHaveLength(1);
+    });
+
+    it("gates recommend and hold on a current visual review; reject needs none", async () => {
+      expect(await out("candidate", "prescreen", id, "--verdict", "recommend", "--notes", "x")).toMatchObject({ error: { code: "visual_review_required" } });
+      expect(await out("candidate", "prescreen", id, "--verdict", "hold", "--notes", "x")).toMatchObject({ error: { code: "visual_review_required" } });
+      expect(await out("candidate", "prescreen", id, "--verdict", "reject", "--notes", "too short")).toMatchObject({ prescreen: { verdict: "reject" } });
+      stdin = review(allPass);
+      await out("candidate", "visual-review", id, "--file", "-");
+      expect(await out("candidate", "prescreen", id, "--verdict", "hold", "--notes", "watermark")).toMatchObject({ prescreen: { verdict: "hold" } });
+    });
+
+    it("survives a refresh from OpusClip, but an edit sends its checks back to the reviewer", async () => {
+      stdin = review(allPass);
+      await out("candidate", "visual-review", id, "--file", "-");
+      await upsert(fixture);
+      expect((await clip("P123.c1")).checkResults).toMatchObject({ aspect_ratio: "pass", no_other_brand_watermarks: "fail" });
+
+      await transition(db, { entity: "candidate_clip", id, to: "needs_edit", actor: "reviewer:test", reason: "fix spelling" });
+      stdin = JSON.stringify([{ op: "replace_phrase", from: "Boxable", to: "Boxabl" }]);
+      await out("candidate", "record-edit", id, "--ops-file", "-", "--reason", "reviewer: fix spelling → replace_phrase");
+      expect(await clip("P123.c1")).toMatchObject({
+        visualReview: null,
+        checkResults: { aspect_ratio: "manual_review_required", required_on_screen_text: "manual_review_required", no_other_brand_watermarks: "manual_review_required" },
+      });
+      expect(await out("candidate", "prescreen", id, "--verdict", "recommend", "--notes", "x")).toMatchObject({ error: { code: "visual_review_required" } });
+    });
+
+    it("frames never runs over the operator endpoint", async () => {
+      const res = await run(["candidate", "frames", id], { db, remote: true });
+      expect(res.output).toMatchObject({ error: { code: "usage", message: expect.stringContaining("operator's machine") } });
     });
   });
 

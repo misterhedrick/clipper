@@ -19,6 +19,7 @@ import { PackagingError, type BundleStore } from "../modules/packaging/index.js"
 import { NotifyError } from "../modules/notifier/index.js";
 import { FootageError } from "../modules/footage-sources/index.js";
 import { SourcingError } from "../modules/sourcing/index.js";
+import { FramesError } from "../modules/frames/index.js";
 
 // Every command prints one JSON document to stdout. Failures print
 // {"error":{"code","message"}} and exit non-zero, so the operator playbook can
@@ -39,6 +40,8 @@ export type CommandContext = {
   bundleStore?: BundleStore;
   /** False when the command came in over HTTPS: file arguments must arrive as stdin, never as server paths. */
   allowFilePaths: boolean;
+  /** Looks a candidate up on the review app instead of the local database (a local command in remote mode). */
+  showCandidate?: (id: string) => Promise<RunResult>;
 };
 
 export type Command = {
@@ -70,6 +73,8 @@ export type RunDeps = {
   bundleStore?: BundleStore;
   /** Set by the operator endpoint: the command came from a remote client (see src/cli/remote.ts). */
   remote?: boolean;
+  /** See CommandContext.showCandidate. */
+  showCandidate?: (id: string) => Promise<RunResult>;
 };
 
 export type RunResult = { exitCode: number; output: unknown };
@@ -130,6 +135,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<RunResult
     env: deps.env ?? process.env,
     bundleStore: deps.bundleStore,
     allowFilePaths: !deps.remote,
+    showCandidate: deps.showCandidate,
   };
 
   try {
@@ -154,7 +160,8 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<RunResult
       err instanceof SubmissionError ||
       err instanceof UploadError ||
       err instanceof PackagingError ||
-      err instanceof NotifyError
+      err instanceof NotifyError ||
+      err instanceof FramesError
     ) {
       return errorResult(err.code, err.message);
     }

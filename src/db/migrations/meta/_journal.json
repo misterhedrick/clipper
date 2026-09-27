@@ -50,6 +50,13 @@
       "when": 1790457374219,
       "tag": "0006_futuristic_omega_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790532317333,
+      "tag": "0007_workable_titanium_man",
+      "breakpoints": true
     }
   ]
 }

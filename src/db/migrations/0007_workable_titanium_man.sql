@@ -1,0 +1,1 @@
+ALTER TABLE "candidate_clips" ADD COLUMN "visual_review" jsonb;
