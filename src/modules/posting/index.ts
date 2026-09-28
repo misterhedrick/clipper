@@ -49,9 +49,10 @@ export const MIN_GAP_HOURS = 3;
 export const MAX_PER_DAY = 4;
 /**
  * The earliest slot leaves the person this long to confirm the post in OpusClip.
- * An approval link stops working once its slot has passed (seen 2026-09-28 with 15 minutes).
+ * An approval link stops working once its slot has passed, so the links go to
+ * Discord the moment they exist (`social alert`). 5 minutes, the person's call (2026-09-28).
  */
-export const LEAD_MINUTES = 60;
+export const LEAD_MINUTES = 5;
 
 const HOUR = 3_600_000;
 /** Statuses that hold a slot. */
@@ -382,6 +383,25 @@ export async function linksToSend(db: Db) {
 export async function markNotified(db: Db, postIds: string[], at = new Date()) {
   if (!postIds.length) return;
   await db.update(posts).set({ notifiedAt: at }).where(and(inArray(posts.id, postIds), isNull(posts.notifiedAt)));
+}
+
+/**
+ * Posts waiting for the person's confirmation whose slot hasn't passed, with one
+ * link that confirms them all (OpusClip takes comma-joined approval tokens).
+ */
+export async function pendingApprovals(db: Db, now = new Date()) {
+  const rows = await db
+    .select({ post: posts, title: candidateClips.title })
+    .from(posts)
+    .innerJoin(candidateClips, eq(candidateClips.id, posts.candidateClipId))
+    .where(eq(posts.status, "requested"))
+    .orderBy(asc(posts.publishAt));
+  const live = rows.filter((r) => r.post.approvalUrl && (!r.post.publishAt || r.post.publishAt > now));
+  const tokens = live.map((r) => new URL(r.post.approvalUrl!).hash.slice(1)).filter(Boolean);
+  return {
+    combinedUrl: tokens.length ? `https://clip.opus.pro/agent-approvals#${tokens.join(",")}` : null,
+    posts: live.map((r) => ({ postId: r.post.id, title: r.title, platform: r.post.platform, account: r.post.accountHandle, publishAt: r.post.publishAt })),
+  };
 }
 
 /** A clip's posts, for `post list` and the review page. */
