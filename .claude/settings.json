@@ -1,5 +1,9 @@
 {
   "permissions": {
+    "allow": [
+      "mcp__OpusClip__opusclip_list_social_accounts",
+      "mcp__OpusClip__opusclip_list_scheduled_posts"
+    ],
     "deny": [
       "mcp__OpusClip__opusclip_create_post_task",
       "mcp__OpusClip__opusclip_schedule_publish",
