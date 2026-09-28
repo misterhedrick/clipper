@@ -47,8 +47,11 @@ export const POST_ACCOUNTS: readonly PostAccount[] = [
 /** Spacing per account: at most one post every 3 hours, and 4 in any 24 hours. */
 export const MIN_GAP_HOURS = 3;
 export const MAX_PER_DAY = 4;
-/** The earliest slot leaves the person this long to confirm the post in OpusClip. */
-export const LEAD_MINUTES = 15;
+/**
+ * The earliest slot leaves the person this long to confirm the post in OpusClip.
+ * An approval link stops working once its slot has passed (seen 2026-09-28 with 15 minutes).
+ */
+export const LEAD_MINUTES = 60;
 
 const HOUR = 3_600_000;
 /** Statuses that hold a slot. */
@@ -75,9 +78,17 @@ export function nextSlot(taken: Date[], earliest: Date): Date {
 /** Slots are whole minutes, in UTC, as OpusClip takes them. */
 const toIso = (d: Date) => new Date(Math.ceil(d.getTime() / 60_000) * 60_000).toISOString().replace(/\.\d{3}Z$/, "Z");
 
-/** YouTube shows `title` as the video title: 100 characters, no angle brackets. */
-export function youtubeTitle(clipTitle: string | null, caption: string): string {
-  const base = (clipTitle?.trim() || caption.split("\n")[0]!.trim()).replace(/[<>]/g, "");
+/**
+ * YouTube shows `title` as the video title: 100 characters, no angle brackets.
+ * Taken from the caption (checked against the campaign's rules and by the
+ * reviewer), never from OpusClip's own clip title, which nobody checks
+ * (it spelled Boxabl "Boxable", 2026-09-28): the caption's first line that
+ * isn't only hashtags and tags.
+ */
+export function youtubeTitle(caption: string): string {
+  const lines = caption.split("\n").map((l) => l.trim()).filter(Boolean);
+  const line = lines.find((l) => !/^([#@]\S+\s*)+$/.test(l)) ?? lines[0] ?? "";
+  const base = line.replace(/[<>]/g, "");
   return base.length <= 100 ? base : `${base.slice(0, 99).trimEnd()}…`;
 }
 
@@ -88,7 +99,7 @@ export function buildPostParams(
   publishAt: string,
 ): Record<string, unknown> {
   const base = { projectId: clip.projectId, clipId: clip.clipId, postAccountId: a.postAccountId, publishAt };
-  if (a.platform === "youtube") return { ...base, title: youtubeTitle(clip.title, clip.caption), description: clip.caption, mediaType: "short" };
+  if (a.platform === "youtube") return { ...base, title: youtubeTitle(clip.caption), description: clip.caption, mediaType: "short" };
   if (a.platform === "instagram") return { ...base, ...(a.subAccountId ? { subAccountId: a.subAccountId } : {}), title: clip.caption, mediaType: "reel" };
   return { ...base, title: clip.caption };
 }
@@ -229,6 +240,32 @@ export async function recordRequested(ctx: PostingCtx, postId: string, input: { 
     const [updated] = await tx.update(posts).set(set).where(and(eq(posts.id, postId), eq(posts.status, "planned"))).returning();
     if (!updated) throw new PostingError("invalid_state", `Post ${postId} changed while recording; re-read it`);
     await audit(tx, { entityType: "candidate_clip", entityId: p.candidateClipId, action: approvalUrl ? "post_requested" : "post_request_failed", actor: ctx.actor, details: { postId, ...set } });
+    return postView(updated);
+  });
+}
+
+/**
+ * Drops a post the person never confirmed (its approval link expired, or they
+ * decided against it): planned or requested → cancelled, which frees the slot so
+ * `social plan` issues a fresh one. A post confirmed in OpusClip (scheduled)
+ * is cancelled in OpusClip itself, not here.
+ */
+export async function cancelPost(ctx: PostingCtx, postId: string, reason: string) {
+  const why = reason.trim();
+  if (!why) throw new PostingError("invalid_argument", "--reason is required");
+  const p = await loadPost(ctx.db, postId);
+  if (p.status === "cancelled") return { ...postView(p), alreadyCancelled: true };
+  if (p.status !== "planned" && p.status !== "requested") {
+    throw new PostingError("invalid_state", `Post ${postId} is ${p.status}; only planned or requested posts are cancelled here (a scheduled post is cancelled in OpusClip)`);
+  }
+  return ctx.db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(posts)
+      .set({ status: "cancelled", failureReason: why.slice(0, 500) })
+      .where(and(eq(posts.id, postId), inArray(posts.status, ["planned", "requested"])))
+      .returning();
+    if (!updated) throw new PostingError("invalid_state", `Post ${postId} changed while cancelling; re-read it`);
+    await audit(tx, { entityType: "candidate_clip", entityId: p.candidateClipId, action: "post_cancelled", actor: ctx.actor, details: { postId, from: p.status, reason: why } });
     return postView(updated);
   });
 }

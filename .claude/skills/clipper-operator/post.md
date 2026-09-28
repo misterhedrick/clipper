@@ -19,8 +19,12 @@ For each `ready_to_post` clip (`clipper candidate list --status ready_to_post`):
 2. For each post still `planned`: call `opusclip_schedule_publish` with exactly its `params`. A hook (`clipper guard post`) blocks anything else, including `opusclip_create_post_task`: every post takes a slot.
 3. Record the answer: `clipper social requested <postId> --approval-url <approval_url>`, or `--error "<message>"` when the call failed (that frees the slot).
 
+## Expired approvals
+
+An approval link stops working once its slot has passed. For each post still `requested` whose `publishAt` is in the past and that `opusclip_list_scheduled_posts` doesn't list: `clipper social cancel <postId> --reason "approval link expired"`, then plan and schedule the clip again (step 2) for fresh links. Don't do this for a post OpusClip lists as scheduled: that one was confirmed.
+
 ## 3. Hand it to the person
 
-Under "Needs you" in the report, list each approval link with its account and time: "Confirm in OpusClip: TikTok @hedrick.clips, goes out 14:15 UTC: <approval_url>". A post the person hasn't confirmed before its time may not go out. Say so if a slot is close.
+Under "Needs you" in the report, give **one combined link** for all the approvals (`https://clip.opus.pro/agent-approvals#<token>,<token>,...`, tokens from each `approval_url`), and list what it covers: account, platform and time. The links are web pages: on a phone they open in the browser (signed in to OpusClip), not in the OpusClip app. A post the person hasn't confirmed before its time may not go out. Say so if a slot is close.
 
 Once links are live and sent, the person submits them on Content Rewards and taps **Mark posted** on the clip's page.

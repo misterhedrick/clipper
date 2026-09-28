@@ -37,10 +37,11 @@ describe("nextSlot", () => {
 });
 
 describe("youtubeTitle", () => {
-  it("uses the clip title, capped at 100 characters, without angle brackets", () => {
-    expect(youtubeTitle("A <great> clip", CAPTION)).toBe("A great clip");
-    expect(youtubeTitle("x".repeat(120), CAPTION)).toHaveLength(100);
-    expect(youtubeTitle(null, CAPTION)).toBe("Clutch @callofduty");
+  it("uses the caption's first real line, never OpusClip's clip title, capped at 100 characters", () => {
+    expect(youtubeTitle("A <great> clip\n#tag")).toBe("A great clip");
+    expect(youtubeTitle("x".repeat(120))).toHaveLength(100);
+    expect(youtubeTitle(CAPTION)).toBe("Clutch @callofduty");
+    expect(youtubeTitle("#boxabl #tinyhome\n@boxabl\nA home that ships anywhere")).toBe("A home that ships anywhere");
   });
 });
 
@@ -113,7 +114,7 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper social …", () => {
     const publishAt = byPlatform.tiktok.publishAt.replace(/\.\d{3}Z$/, "Z");
     expect(byPlatform.tiktok.params).toEqual({ projectId: "P1", clipId: "c1", postAccountId: TIKTOK.postAccountId, publishAt, title: CAPTION });
     expect(byPlatform.instagram.params).toMatchObject({ postAccountId: INSTAGRAM.postAccountId, subAccountId: INSTAGRAM.subAccountId, title: CAPTION, mediaType: "reel" });
-    expect(byPlatform.youtube.params).toMatchObject({ postAccountId: YOUTUBE.postAccountId, title: "The one-shot", description: CAPTION, mediaType: "short" });
+    expect(byPlatform.youtube.params).toMatchObject({ postAccountId: YOUTUBE.postAccountId, title: "Clutch @callofduty", description: CAPTION, mediaType: "short" });
     expect(new Date(publishAt).getTime()).toBeGreaterThan(Date.now());
 
     const again = await out("social", "plan", candidateId);
@@ -176,6 +177,21 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper social …", () => {
     const replanned = again.posts.find((p: any) => p.platform === b.platform);
     expect(replanned).toMatchObject({ status: "planned" });
     expect(replanned.postId).not.toBe(b.postId);
+  });
+
+  it("cancels a post the person never confirmed, and re-plans it in a fresh slot", async () => {
+    const plan = await out("social", "plan", candidateId);
+    const [a, b, c] = plan.posts;
+    await out("social", "requested", a.postId, "--approval-url", "https://clip.opus.pro/approve/1");
+    expect(await out("social", "cancel", a.postId, "--reason", "approval link expired")).toMatchObject({ status: "cancelled", failureReason: "approval link expired" });
+    expect(await out("social", "cancel", b.postId, "--reason", "expired")).toMatchObject({ status: "cancelled" });
+    expect((await out("social", "cancel", c.postId)).error.code).toBe("usage");
+    await db.update(posts).set({ status: "scheduled" }).where(eq(posts.id, c.postId));
+    expect((await out("social", "cancel", c.postId, "--reason", "x")).error.code).toBe("invalid_state");
+
+    const again = await out("social", "plan", candidateId);
+    expect(again.posts.map((p: any) => p.status).sort()).toEqual(["planned", "planned", "scheduled"]);
+    expect(again.posts.find((p: any) => p.platform === a.platform).postId).not.toBe(a.postId);
   });
 
   it("syncs OpusClip's post statuses and sends new live links once", async () => {
