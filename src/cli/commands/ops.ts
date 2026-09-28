@@ -5,7 +5,7 @@ import { packageCandidate } from "../../modules/packaging/index.js";
 import { r2Store } from "../../modules/packaging/r2.js";
 import { positional, requiredOption, type Command, type CommandContext } from "../run.js";
 
-const notifier = (ctx: CommandContext) => {
+export const notifier = (ctx: CommandContext) => {
   const { NOTIFY_WEBHOOK_URL, REVIEW_URL } = loadConfig(["notify"], ctx.env);
   return {
     send: (message: string) => sendNotification({ webhookUrl: NOTIFY_WEBHOOK_URL, fetch: ctx.connector.fetch }, message),

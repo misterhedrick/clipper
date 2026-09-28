@@ -97,6 +97,14 @@ Added 2026-09-27: the user no longer confirms configs by hand; Claude checks its
 - The attention digest tells the person, once per activation, to join each self-activated campaign on Content Rewards. Clipping starts right away.
 - **Done when:** activation is refused without a verified round, after a config change, or with unresolved fields; mismatches loop and flag at round 3; unsettled flags at once; the join ping is sent once; the rule unlocks nothing else. Covered by tests (`test/cli/campaign.test.ts`, `test/db/transition.test.ts`).
 
+## 10d. Posting through OpusClip ✅ done
+Added 2026-09-28: the person doesn't fill in post forms; clips are scheduled through OpusClip and the links come back on their own.
+- `posts` gains a status, account, slot, exact params, approval link, schedule ID, failure reason and `notified_at` (migration `0009`).
+- `clipper social plan` (one post per account in `POST_ACCOUNTS` / `docs/SOCIAL_ACCOUNTS.md`, next free slot: ≥3h apart, ≤4 per 24h, ≥15 min ahead), `social requested`, `social sync` (+ Discord links, once), `social notify`, `social list`.
+- `clipper guard post` + `.claude/hooks/guard-opusclip-post.sh`: only `opusclip_schedule_publish` with a planned post's exact params; `create_post_task` never. OpusClip posts nothing until the person confirms in its app.
+- Review page: each post's status, a "Confirm in OpusClip" link, the live link, and **Mark posted** (reviewer only, needs a live post). The manual form is reduced to platform + link under "Record a post by hand"; views, likes and earnings are gone from it.
+- **Done when:** the guard allows only exact planned params and blocks everything else; slots respect the spacing; sync records statuses and sends each link once; code never moves a clip to `posted`. Covered by tests (`test/cli/social.test.ts`, `test/cli/campaign.test.ts`, `test/web/review.test.ts`). Live check: the first real post.
+
 ## 11. Review web app ✅ done
 - Server-rendered pages on the existing Fastify app, behind `REVIEWER_TOKEN` for v1: campaigns awaiting confirmation (edit + confirm → `active`), candidate queue with preview video, checks, prescreen notes and caption (approve / needs edit / reject / hold), post recording.
 - **Done when:** approve is only reachable through an authenticated request, and every decision writes a `status_events` row with the reviewer as actor.

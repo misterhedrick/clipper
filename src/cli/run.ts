@@ -10,6 +10,7 @@ import { InvalidConfigError } from "../modules/campaign-config/index.js";
 import { campaignCommands } from "./commands/campaign.js";
 import { candidateCommands } from "./commands/candidate.js";
 import { guardCommands } from "./commands/guard.js";
+import { socialCommands } from "./commands/social.js";
 import { footageCommands } from "./commands/footage.js";
 import { creditsCommands, sourceCommands } from "./commands/source.js";
 import { attentionCommands, notifyCommands, packageCommands } from "./commands/ops.js";
@@ -20,6 +21,7 @@ import { NotifyError } from "../modules/notifier/index.js";
 import { FootageError } from "../modules/footage-sources/index.js";
 import { SourcingError } from "../modules/sourcing/index.js";
 import { FramesError } from "../modules/frames/index.js";
+import { PostingError } from "../modules/posting/index.js";
 
 // Every command prints one JSON document to stdout. Failures print
 // {"error":{"code","message"}} and exit non-zero, so the operator playbook can
@@ -62,6 +64,7 @@ const groups: Record<string, Record<string, Command>> = {
   package: packageCommands,
   notify: notifyCommands,
   attention: attentionCommands,
+  social: socialCommands,
   guard: guardCommands,
 };
 
@@ -161,7 +164,8 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<RunResult
       err instanceof UploadError ||
       err instanceof PackagingError ||
       err instanceof NotifyError ||
-      err instanceof FramesError
+      err instanceof FramesError ||
+      err instanceof PostingError
     ) {
       return errorResult(err.code, err.message);
     }

@@ -13,6 +13,7 @@ import {
   editCampaignConfig,
   decideCandidate,
   deleteCampaign,
+  markPosted,
   recordPost,
   requestConfigChanges,
   ReviewError,
@@ -38,6 +39,14 @@ export type ReviewAppOptions = { db: Db; reviewerToken: string; now?: () => Date
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LOGIN_WINDOW_MS = 15 * 60_000;
+const POST_STATUS_LABELS: Record<string, string> = {
+  planned: "Being scheduled",
+  requested: "Waiting for you to confirm",
+  scheduled: "Scheduled",
+  posted: "Live",
+  failed: "Failed",
+  cancelled: "Cancelled",
+};
 const LOGIN_MAX_FAILURES = 10;
 
 const SECURITY_HEADERS = {
@@ -79,7 +88,6 @@ async function act(reply: FastifyReply, path: string, ok: string, fn: () => Prom
   }
 }
 
-const optNumber = (v: string | undefined) => (v === undefined || v.trim() === "" ? undefined : Number(v));
 
 export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOptions) {
   const { db, reviewerToken } = opts;
@@ -580,20 +588,32 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
           ${postable
             ? html`<h2>Posts</h2>
               <div class="card scroll">
-                <table>${d.posts.map((p) => html`<tr><td>${p.platform}</td><td>${safeUrl(p.url) ? html`<a href="${safeUrl(p.url)!}" target="_blank" rel="noopener noreferrer">${p.url}</a>` : p.url ?? ""}</td><td class="muted">${when(p.postedAt)}</td><td>${p.views ?? ""} views · ${p.likes ?? ""} likes · $${p.earnings ?? ""}</td></tr>`)}</table>
-                <form method="post" action="/candidates/${clip.id}/posts">
-                  <div class="grid">
-                    <div><label for="platform">Platform</label><select id="platform" name="platform">${POST_PLATFORMS.map((p) => html`<option>${p}</option>`)}</select></div>
-                    <div><label for="url">Post URL</label><input id="url" name="url" type="url" required placeholder="https://"></div>
-                  </div>
-                  <div class="grid">
-                    <div><label for="views">Views</label><input id="views" name="views" inputmode="numeric"></div>
-                    <div><label for="likes">Likes</label><input id="likes" name="likes" inputmode="numeric"></div>
-                    <div><label for="earnings">Earnings ($)</label><input id="earnings" name="earnings" inputmode="decimal"></div>
-                  </div>
-                  <label for="pnotes">Notes</label><input id="pnotes" name="notes">
-                  <button>Record post</button> <span class="muted">Recording the same platform again updates it.</span>
-                </form>
+                ${d.posts.length
+                  ? html`<table>${d.posts.map(
+                      (p) => html`<tr>
+                        <td>${p.platform}${p.accountHandle ? html` <span class="muted">${p.accountHandle}</span>` : ""}</td>
+                        <td>${POST_STATUS_LABELS[p.status] ?? p.status}${p.failureReason ? html` <span class="muted">(${p.failureReason})</span>` : ""}</td>
+                        <td>${safeUrl(p.url)
+                          ? html`<a href="${safeUrl(p.url)!}" target="_blank" rel="noopener noreferrer">${p.url}</a>`
+                          : p.status === "requested" && safeUrl(p.approvalUrl)
+                            ? html`<a class="button" href="${safeUrl(p.approvalUrl)!}" target="_blank" rel="noopener noreferrer">Confirm in OpusClip</a>`
+                            : ""}</td>
+                        <td class="muted">${p.status === "posted" ? when(p.postedAt) : p.publishAt ? `goes out ${when(p.publishAt)}` : ""}</td>
+                      </tr>`,
+                    )}</table>`
+                  : html`<p class="muted">No posts yet. The next operator run schedules this clip on every account; you confirm each post in OpusClip.</p>`}
+                ${clip.status === "ready_to_post" && d.posts.some((p) => p.status === "posted" && p.url)
+                  ? html`<form method="post" action="/candidates/${clip.id}/mark-posted"><button>Mark posted</button> <span class="muted">Once you've submitted the links on Content Rewards.</span></form>`
+                  : ""}
+                <details><summary class="muted">Record a post by hand</summary>
+                  <form method="post" action="/candidates/${clip.id}/posts">
+                    <div class="grid">
+                      <div><label for="platform">Platform</label><select id="platform" name="platform">${POST_PLATFORMS.map((p) => html`<option>${p}</option>`)}</select></div>
+                      <div><label for="url">Post URL</label><input id="url" name="url" type="url" required placeholder="https://"></div>
+                    </div>
+                    <button>Record post</button> <span class="muted">Only for posts made outside OpusClip.</span>
+                  </form>
+                </details>
               </div>`
             : ""}
 
@@ -634,12 +654,13 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
         recordPost(ctx(req), id, {
           platform: f.platform ?? "",
           url: f.url ?? "",
-          views: optNumber(f.views),
-          likes: optNumber(f.likes),
-          earnings: optNumber(f.earnings),
-          notes: f.notes,
         }),
       );
+    });
+
+    scope.post("/candidates/:id/mark-posted", async (req, reply) => {
+      const { id } = req.params as { id: string };
+      return act(reply, `/candidates/${id}`, "Marked posted.", () => markPosted(ctx(req), id));
     });
 
     // --- posting -------------------------------------------------------------------------
