@@ -214,7 +214,9 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper social …", () => {
     const plan = await out("social", "plan", candidateId);
     for (const p of plan.posts) await out("social", "requested", p.postId, "--approval-url", `https://clip.opus.pro/approve/${p.platform}`);
 
-    const item = (account: string, status: string, extra: object = {}) => ({ clip_id: "c1", project_id: "P1", post_account_id: account, schedule_id: `s-${account}`, status, ...extra });
+    // The live shape (2026-09-28): platform, no account ID.
+    const platformName: Record<string, string> = { [TIKTOK.postAccountId]: "TIKTOK_BUSINESS", [INSTAGRAM.postAccountId]: "INSTAGRAM_BUSINESS", [YOUTUBE.postAccountId]: "YOUTUBE", stranger: "FACEBOOK" };
+    const item = (account: string, status: string, extra: object = {}) => ({ schedule_id: `s-${account}`, project_id: "P1", clip_id: "c1", publish_at: "2026-09-28T22:59:00.000Z", status, platform: platformName[account], ...extra });
     const first = await sync({ posts: [item(TIKTOK.postAccountId, "scheduled"), item(INSTAGRAM.postAccountId, "scheduled"), item("stranger", "scheduled")] });
     expect(first.changes).toHaveLength(2);
     expect(first.unmatched).toHaveLength(1);
