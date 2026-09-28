@@ -1,6 +1,6 @@
 # Clipper
 
-A clip-automation pipeline: Content Rewards campaigns → footage → OpusClip → human review → Ready to Post. Read `docs/ROADMAP.md` (direction + current status), `README.md` (spec) and `docs/ARCHITECTURE.md` (design) before changing anything. Keep `docs/ROADMAP.md` §5–7 current when a task finishes.
+A clip-automation pipeline: Content Rewards campaigns → footage → OpusClip → human review → Ready to Post. Read `docs/ROADMAP.md` (direction + current status), `README.md` (spec) and `docs/ARCHITECTURE.md` (design) before changing anything. The social accounts clips go to are in `docs/SOCIAL_ACCOUNTS.md`. Keep `docs/ROADMAP.md` §5–7 current when a task finishes.
 
 ## Two modes of working in this repo
 
