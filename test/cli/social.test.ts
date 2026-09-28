@@ -194,6 +194,22 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper social …", () => {
     expect(again.posts.find((p: any) => p.platform === a.platform).postId).not.toBe(a.postId);
   });
 
+  it("sends every approval still in time to Discord as one link", async () => {
+    expect(await out("social", "alert")).toEqual({ sent: 0 });
+    const plan = await out("social", "plan", candidateId);
+    const [a, b, c] = plan.posts;
+    await out("social", "requested", a.postId, "--approval-url", "https://clip.opus.pro/agent-approvals#v2.AAA");
+    await out("social", "requested", b.postId, "--approval-url", "https://clip.opus.pro/agent-approvals#v2.BBB");
+    await out("social", "requested", c.postId, "--approval-url", "https://clip.opus.pro/agent-approvals#v2.CCC");
+    await db.update(posts).set({ publishAt: new Date(Date.now() - 60_000) }).where(eq(posts.id, c.postId));
+
+    const res = await out("social", "alert");
+    expect(res).toMatchObject({ sent: 2, combinedUrl: "https://clip.opus.pro/agent-approvals#v2.AAA,v2.BBB" });
+    expect(delivered).toHaveLength(1);
+    expect(delivered[0]!.text).toContain("https://clip.opus.pro/agent-approvals#v2.AAA,v2.BBB");
+    expect(delivered[0]!.text).not.toContain("CCC");
+  });
+
   it("syncs OpusClip's post statuses and sends new live links once", async () => {
     const plan = await out("social", "plan", candidateId);
     for (const p of plan.posts) await out("social", "requested", p.postId, "--approval-url", `https://clip.opus.pro/approve/${p.platform}`);
