@@ -99,6 +99,16 @@ export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
 export const POST_PLATFORMS = ["tiktok", "instagram", "youtube"] as const;
 export type PostPlatform = (typeof POST_PLATFORMS)[number];
 
+/**
+ * A post's life when OpusClip publishes it (`clipper post …`): planned (params
+ * issued, slot taken) → requested (OpusClip returned an approval link) →
+ * scheduled (the person confirmed it in OpusClip) → posted (the platform
+ * reports it live, with its link) or failed. `cancelled` frees the slot.
+ * Posts a reviewer records by hand are `posted` from the start.
+ */
+export const POST_STATUSES = ["planned", "requested", "scheduled", "posted", "failed", "cancelled"] as const;
+export type PostStatus = (typeof POST_STATUSES)[number];
+
 export const CHECK_OUTCOMES = ["pass", "fail", "manual_review_required"] as const;
 export type CheckOutcome = (typeof CHECK_OUTCOMES)[number];
 
@@ -369,6 +379,19 @@ export const posts = pgTable(
       .notNull()
       .references(() => candidateClips.id),
     platform: text("platform").$type<PostPlatform>().notNull(),
+    status: text("status").$type<PostStatus>().notNull().default("posted"),
+    /** OpusClip's social account ID (docs/SOCIAL_ACCOUNTS.md) and its handle, for posts published through OpusClip. */
+    postAccountId: text("post_account_id"),
+    accountHandle: text("account_handle"),
+    /** The slot: when the post is set to go out. */
+    publishAt: timestamp("publish_at", { withTimezone: true }),
+    /** Exactly what the operator passes to opusclip_schedule_publish; the post guard compares against it. */
+    postParams: jsonb("post_params").$type<Record<string, unknown>>(),
+    approvalUrl: text("approval_url"),
+    opusclipScheduleId: text("opusclip_schedule_id"),
+    failureReason: text("failure_reason"),
+    /** When the live link was sent to the person (to submit on Content Rewards). */
+    notifiedAt: timestamp("notified_at", { withTimezone: true }),
     url: text("url"),
     postedAt: timestamp("posted_at", { withTimezone: true }),
     views: integer("views"),
@@ -377,5 +400,9 @@ export const posts = pgTable(
     earnings: numeric("earnings"),
     notes: text("notes"),
   },
-  (t) => [check("posts_platform_check", inList("platform", POST_PLATFORMS))],
+  (t) => [
+    check("posts_platform_check", inList("platform", POST_PLATFORMS)),
+    check("posts_status_check", inList("status", POST_STATUSES)),
+    index("posts_account_publish_idx").on(t.postAccountId, t.publishAt),
+  ],
 );

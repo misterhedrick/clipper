@@ -353,14 +353,40 @@ describe.skipIf(!TEST_DATABASE_URL)("review web app", () => {
       await transition(db, { entity: "candidate_clip", id: candidateId, to: "ready_to_post", actor: "claude-operator" });
       expect(flash(await post(`/candidates/${candidateId}/posts`, { platform: "tiktok", url: "javascript:alert(1)" }, cookie)).error).toMatch(/https/);
       await post(`/candidates/${candidateId}/posts`, { platform: "tiktok", url: "https://tiktok.com/@me/video/1" }, cookie);
-      await post(`/candidates/${candidateId}/posts`, { platform: "youtube", url: "https://youtube.com/shorts/abc", views: "1200" }, cookie);
-      await post(`/candidates/${candidateId}/posts`, { platform: "tiktok", url: "https://tiktok.com/@me/video/1", views: "5000", earnings: "8.75" }, cookie);
+      await post(`/candidates/${candidateId}/posts`, { platform: "youtube", url: "https://youtube.com/shorts/abc" }, cookie);
+      await post(`/candidates/${candidateId}/posts`, { platform: "tiktok", url: "https://tiktok.com/@me/video/2" }, cookie);
 
       expect((await candidate()).status).toBe("posted");
       const rows = await db.select().from(posts).where(eq(posts.candidateClipId, candidateId));
       expect(rows).toHaveLength(2);
-      expect(rows.find((r) => r.platform === "tiktok")).toMatchObject({ views: 5000, earnings: "8.75" });
+      expect(rows.find((r) => r.platform === "tiktok")).toMatchObject({ status: "posted", url: "https://tiktok.com/@me/video/2" });
       expect(await events(candidateId, "posted")).toEqual([expect.objectContaining({ actor: "reviewer:alex" })]);
+    });
+
+    it("shows OpusClip posts with their confirm link, and lets a reviewer mark the clip posted once one is live", async () => {
+      const { cookie } = await login("alex");
+      await db.update(candidateClips).set({ caption: CAPTION }).where(eq(candidateClips.id, candidateId));
+      await decideCandidate({ db, actor: "reviewer:alex" }, candidateId, { decision: "approve" });
+      await transition(db, { entity: "candidate_clip", id: candidateId, to: "ready_to_post", actor: "claude-operator" });
+      await db.insert(posts).values([
+        { candidateClipId: candidateId, platform: "tiktok", status: "requested", accountHandle: "@hedrick.clips", publishAt: new Date(), approvalUrl: "https://clip.opus.pro/approve/1" },
+        { candidateClipId: candidateId, platform: "youtube", status: "scheduled", accountHandle: "@hedrickclips", publishAt: new Date() },
+      ]);
+      const page = async () => (await app.inject({ method: "GET", url: `/candidates/${candidateId}`, headers: { cookie } })).body;
+      let body = await page();
+      expect(body).toContain("Confirm in OpusClip");
+      expect(body).toContain("https://clip.opus.pro/approve/1");
+      expect(body).not.toContain("Mark posted");
+      expect(body).not.toContain("Earnings");
+      expect(flash(await post(`/candidates/${candidateId}/mark-posted`, {}, cookie)).error).toMatch(/No live post/);
+
+      await db.update(posts).set({ status: "posted", url: "https://www.tiktok.com/@hedrick.clips/video/1" }).where(eq(posts.platform, "tiktok"));
+      body = await page();
+      expect(body).toContain("Mark posted");
+      await post(`/candidates/${candidateId}/mark-posted`, {}, cookie);
+      expect((await candidate()).status).toBe("posted");
+      expect(await events(candidateId, "posted")).toEqual([expect.objectContaining({ actor: "reviewer:alex", reason: expect.stringContaining("tiktok.com") })]);
+      expect((await post(`/candidates/${candidateId}/mark-posted`, {}, "")).statusCode).toBe(401);
     });
   });
 

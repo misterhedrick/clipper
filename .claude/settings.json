@@ -5,8 +5,6 @@
       "mcp__OpusClip__opusclip_list_scheduled_posts"
     ],
     "deny": [
-      "mcp__OpusClip__opusclip_create_post_task",
-      "mcp__OpusClip__opusclip_schedule_publish",
       "mcp__OpusClip__opusclip_unschedule_publish",
       "mcp__OpusClip__opusclip_share_project",
       "mcp__Claude_Code_Remote__create_trigger",
@@ -31,6 +29,15 @@
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-opusclip-edit.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__OpusClip__opusclip_(create_post_task|schedule_publish)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-opusclip-post.sh"
           }
         ]
       },
