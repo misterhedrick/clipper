@@ -274,13 +274,17 @@ export async function cancelPost(ctx: PostingCtx, postId: string, reason: string
 // --- sync --------------------------------------------------------------------------------
 
 // opusclip_list_scheduled_posts. Only the fields we match and record are read;
-// the rest passes through. Seen 2026-09-28 as {posts: [...]}, snake_case like the other tools.
+// the rest passes through. Seen live 2026-09-28: {posts: [{schedule_id, project_id,
+// clip_id, publish_at, status: "scheduled", platform: "TIKTOK_BUSINESS" |
+// "INSTAGRAM_BUSINESS" | "YOUTUBE"}]}, with no account ID, so posts are matched
+// on clip + platform (one post per platform per clip).
 const scheduledPost = z
   .object({
     clip_id: z.string().optional(),
     clipId: z.string().optional(),
     post_account_id: z.string().optional(),
     postAccountId: z.string().optional(),
+    platform: z.string().optional(),
     schedule_id: z.string().nullish(),
     status: z.string(),
     post_url: z.string().optional(),
@@ -308,6 +312,12 @@ export function parseScheduledPosts(input: unknown): z.infer<typeof scheduledPos
   return parsed.data.posts;
 }
 
+/** OpusClip's platform names (TIKTOK_BUSINESS, INSTAGRAM_BUSINESS, YOUTUBE) → ours. */
+export function platformOf(name: string | undefined): PostPlatform | undefined {
+  const n = name?.toUpperCase() ?? "";
+  return n.startsWith("TIKTOK") ? "tiktok" : n.startsWith("INSTAGRAM") ? "instagram" : n.startsWith("YOUTUBE") ? "youtube" : undefined;
+}
+
 const LIVE = /^(posted|published|success|succeeded|completed?)$/i;
 const FAILED = /^(failed|failure|error|rejected)$/i;
 const SCHEDULED = /^(scheduled|pending|queued|publishing|processing)$/i;
@@ -332,9 +342,12 @@ export async function syncPosts(ctx: PostingCtx, input: unknown) {
     for (const item of listed) {
       const clipId = item.clip_id ?? item.clipId;
       const accountId = item.post_account_id ?? item.postAccountId;
-      const match = open.find((o) => o.clipId === clipId && o.post.postAccountId === accountId && o.post.postAccountId);
+      const platform = platformOf(item.platform);
+      const match = open.find(
+        (o) => o.clipId === clipId && (accountId ? o.post.postAccountId === accountId : !!platform && o.post.platform === platform && !!o.post.postAccountId),
+      );
       if (!match) {
-        unmatched.push({ clipId: clipId ?? null, postAccountId: accountId ?? null, status: item.status });
+        unmatched.push({ clipId: clipId ?? null, platform: item.platform ?? null, postAccountId: accountId ?? null, status: item.status });
         continue;
       }
       const p = match.post;
