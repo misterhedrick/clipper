@@ -1,6 +1,6 @@
 import { eq, inArray } from "drizzle-orm";
 import { campaigns } from "../../db/schema.js";
-import { linksToSend, markNotified, openPosts, planPosts, postsForClip, recordRequested, syncPosts } from "../../modules/posting/index.js";
+import { cancelPost, linksToSend, markNotified, openPosts, planPosts, postsForClip, recordRequested, syncPosts } from "../../modules/posting/index.js";
 import { positional, readJsonInput, requiredOption, type Command, type CommandContext } from "../run.js";
 import { notifier, withReviewLink } from "./ops.js";
 
@@ -45,6 +45,13 @@ export const socialCommands: Record<string, Command> = {
         approvalUrl: ctx.options["approval-url"] as string | undefined,
         error: ctx.options.error as string | undefined,
       }),
+  },
+  cancel: {
+    summary:
+      "Drop a post the person never confirmed (approval link expired, or not wanted): planned/requested → cancelled, freeing its slot for a fresh `social plan`. Scheduled posts are cancelled in OpusClip.",
+    usage: '<postId> --reason "..."',
+    options: { reason: { type: "string" } },
+    run: (ctx) => cancelPost(moduleCtx(ctx), positional(ctx, 0, "postId"), requiredOption(ctx, "reason")),
   },
   sync: {
     summary:
