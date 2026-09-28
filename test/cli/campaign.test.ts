@@ -335,7 +335,7 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper campaign …", () => {
       expect(name).not.toMatch(/approve|activate|confirm|post|publish|join/);
     }
     // Publishing is planned and tracked, never done, by the CLI: the person confirms each post in OpusClip.
-    expect(Object.keys(help.commands).filter((n) => n.startsWith("social "))).toEqual(["social plan", "social requested", "social cancel", "social sync", "social notify", "social list"]);
+    expect(Object.keys(help.commands).filter((n) => n.startsWith("social "))).toEqual(["social plan", "social requested", "social alert", "social cancel", "social sync", "social notify", "social list"]);
     await cli("campaign", "add", `https://contentrewards.com/discover/${MW4}`);
     const [row] = await db.select().from(campaigns).where(eq(campaigns.contentRewardsCampaignId, MW4));
     expect(row!.status).not.toBe("active");

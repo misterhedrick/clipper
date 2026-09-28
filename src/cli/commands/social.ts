@@ -1,6 +1,6 @@
 import { eq, inArray } from "drizzle-orm";
 import { campaigns } from "../../db/schema.js";
-import { cancelPost, linksToSend, markNotified, openPosts, planPosts, postsForClip, recordRequested, syncPosts } from "../../modules/posting/index.js";
+import { cancelPost, linksToSend, markNotified, pendingApprovals, openPosts, planPosts, postsForClip, recordRequested, syncPosts } from "../../modules/posting/index.js";
 import { positional, readJsonInput, requiredOption, type Command, type CommandContext } from "../run.js";
 import { notifier, withReviewLink } from "./ops.js";
 
@@ -29,6 +29,26 @@ async function sendLinks(ctx: CommandContext) {
   return { sent: links.length, links };
 }
 
+const hhmm = (d: Date | null) => (d ? `${d.toISOString().slice(11, 16)} UTC` : "no time set");
+
+/** Sends the posts waiting for the person's confirmation to Discord, as one link. */
+async function sendApprovals(ctx: CommandContext) {
+  const pending = await pendingApprovals(ctx.db());
+  if (!pending.combinedUrl) return { sent: 0 };
+  const first = pending.posts[0]!.publishAt;
+  const lines = [
+    `Approve ${pending.posts.length} post${pending.posts.length === 1 ? "" : "s"} in OpusClip${first ? ` before ${hhmm(first)}` : ""} (open in your phone's browser, signed in to OpusClip):`,
+    pending.combinedUrl,
+    "",
+    ...pending.posts.map((p) => `• ${p.platform} ${p.account ?? ""}, ${hhmm(p.publishAt)}: ${p.title ?? p.postId}`),
+    "",
+    "A post not approved by its time won't go out.",
+  ];
+  const n = notifier(ctx);
+  await n.send(withReviewLink(lines.join("\n"), n.reviewUrl));
+  return { sent: pending.posts.length, combinedUrl: pending.combinedUrl, posts: pending.posts };
+}
+
 export const socialCommands: Record<string, Command> = {
   plan: {
     summary:
@@ -45,6 +65,11 @@ export const socialCommands: Record<string, Command> = {
         approvalUrl: ctx.options["approval-url"] as string | undefined,
         error: ctx.options.error as string | undefined,
       }),
+  },
+  alert: {
+    summary: "Send the person, on Discord, one link that approves every post waiting for confirmation whose time hasn't passed. Run right after `social requested`.",
+    usage: "",
+    run: (ctx) => sendApprovals(ctx),
   },
   cancel: {
     summary:

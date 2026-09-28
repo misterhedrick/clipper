@@ -18,6 +18,7 @@ For each `ready_to_post` clip (`clipper candidate list --status ready_to_post`):
 1. `clipper social plan <candidateId>`. It returns one post per account, each with its slot (at least 3 hours after that account's last post, at most 4 a day) and the exact `params`. Running it again returns the same posts.
 2. For each post still `planned`: call `opusclip_schedule_publish` with exactly its `params`. A hook (`clipper guard post`) blocks anything else, including `opusclip_create_post_task`: every post takes a slot.
 3. Record the answer: `clipper social requested <postId> --approval-url <approval_url>`, or `--error "<message>"` when the call failed (that frees the slot).
+4. As soon as every post is recorded: `clipper social alert`. It sends the person one Discord link that approves them all. The first slot is only 5 minutes out, so do this immediately, before anything else in the run.
 
 ## Expired approvals
 
