@@ -271,6 +271,7 @@ export async function recordPost(
   }
   const platform = input.platform as PostPlatform;
   const values = {
+    status: "posted" as const,
     url: url.toString(),
     postedAt: input.postedAt ?? ctx.now?.() ?? new Date(),
     views: input.views ?? null,
@@ -289,6 +290,29 @@ export async function recordPost(
     }
     return { id, status: "posted" as const, post: row! };
   });
+}
+
+/**
+ * The person's confirmation that a clip is out: ready_to_post → posted, once at
+ * least one of its posts is live with a link (recorded by `clipper social sync`
+ * from OpusClip, or by hand above). Automation never makes this move.
+ */
+export async function markPosted(ctx: ReviewCtx, id: string) {
+  requireHuman(ctx);
+  const { clip } = await loadCandidate(ctx.db, id);
+  if (clip.status === "posted") return { id, status: "posted" as const, alreadyPosted: true };
+  if (clip.status !== "ready_to_post") throw new ReviewError("invalid_state", `Candidate is ${clip.status}; only ready_to_post clips are marked posted`);
+  const live = (await ctx.db.select().from(posts).where(and(eq(posts.candidateClipId, id), eq(posts.status, "posted")))).filter((p) => p.url);
+  if (!live.length) throw new ReviewError("invalid_state", "No live post with a link yet: confirm the posts in OpusClip, then run a sync");
+  await transition(ctx.db, {
+    entity: "candidate_clip",
+    id,
+    to: "posted",
+    actor: ctx.actor,
+    reason: `live on ${live.map((p) => `${p.platform}: ${p.url}`).join(", ")}`,
+    expectFrom: ["ready_to_post"],
+  });
+  return { id, status: "posted" as const };
 }
 
 // --- reads for the pages -----------------------------------------------------------------

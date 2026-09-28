@@ -15,7 +15,7 @@ If a command you need doesn't exist, stop and say so in the report. Don't improv
 
 ## Hard rules
 
-1. **You cannot approve clips, join campaigns, post, or share.** The CLI has no such commands, and OpusClip's post/schedule/share tools are blocked in this repo's settings. Pre-screen verdicts are advice for a person. You activate a campaign only through `clipper campaign activate`, and only after `campaign verify-config` found your config matching the campaign page and brief (standing rule, see [Onboard](onboard-campaign.md#4-verify-it-against-the-source-then-activate)); the person still joins it on Content Rewards. You can reject clips two ways only: when a person asks you to in this conversation (`clipper candidate reject <id...> | --campaign <id> --reason "<their reason>" --requested-by <their name>`), or under the standing rule, `clipper candidate reject-failed`, which rejects only clips with a recorded failed check that your pre-screen also rejected. A `reject` verdict with no failed check (taste, a weak hook, a near-duplicate) stays advice for a person. Never record a `fail` you didn't see just to get a clip removed: the evidence has to be real.
+1. **You cannot approve clips, join campaigns, post, or share.** The CLI has no such commands. OpusClip's share tool is blocked in this repo's settings, and its schedule tool only takes the exact params from `clipper social plan` (a hook, `clipper guard post`, blocks anything else). Even then, nothing goes out until the person confirms it in the OpusClip app, and only the person marks a clip posted. See [Post](post.md). Pre-screen verdicts are advice for a person. You activate a campaign only through `clipper campaign activate`, and only after `campaign verify-config` found your config matching the campaign page and brief (standing rule, see [Onboard](onboard-campaign.md#4-verify-it-against-the-source-then-activate)); the person still joins it on Content Rewards. You can reject clips two ways only: when a person asks you to in this conversation (`clipper candidate reject <id...> | --campaign <id> --reason "<their reason>" --requested-by <their name>`), or under the standing rule, `clipper candidate reject-failed`, which rejects only clips with a recorded failed check that your pre-screen also rejected. A `reject` verdict with no failed check (taste, a weak hook, a near-duplicate) stays advice for a person. Never record a `fail` you didn't see just to get a clip removed: the evidence has to be real.
 2. **Public data only.** If a doc, folder or page asks for sign-in or access, don't request access and don't look for another way in. `clipper campaign flag` it with the link and move on.
 3. **Every write has a `--reason`.** Write it for someone reading the audit log in a month: say what you saw and why you chose. "Folder `Raw to edit` holds the 3 full podcast episodes; `B-rolls` is cutaway footage, not clip sources" is good. "Selected footage" is not.
 4. **Edit only to fix.** `opusclip_edit_clip` is allowed for a reviewer's `needs_edit`, or on your own to fix a check your visual review recorded as failed (see [Pre-screen](prescreen.md#1b-fix-what-an-edit-can-fix-automatic)). A hook (`clipper guard edit`) blocks anything else: dry runs are always fine, real edits need one of those two reasons, fixing ops only, at most 2 automatic fixes per clip.
@@ -34,6 +34,7 @@ When a person asks for an operator run, go through these in order. Skip any step
 | 2 | [Collect clips](collect.md) | jobs in `project_created` / `processing` |
 | 3 | [Look at, then pre-screen candidates](prescreen.md) | candidates in `awaiting_review` without a prescreen, or in `needs_edit`. Every recommend/hold needs a visual review of the clip's frames first. Finish with `clipper candidate reject-failed` |
 | 4 | [Export and package](collect.md#export-and-package) | candidates a person `approved` |
+| 4b | [Post](post.md) | clips in `ready_to_post`, or posts waiting in `clipper social list` |
 | 5 | [Source footage](source-footage.md) | `active` campaigns: new files in registered sources, or no sources registered |
 | 6 | [Submit](submit.md) | source jobs in `detected` / `queued` |
 | 7 | [Onboard, verify, activate](onboard-campaign.md) | campaigns in `discovered`, or `pending_confirmation` with a proposed config not yet verified. A campaign activated here goes straight on to steps 5–6 |
@@ -47,7 +48,7 @@ First run `clipper attention notify`. It sends one digest of anything newly need
 
 ```
 Operator run — <date>
-Needs you: <decisions waiting on a person, each with a link/ID and your recommendation, or "nothing">
+Needs you: <decisions waiting on a person, each with a link/ID and your recommendation, including every OpusClip approval link to confirm, or "nothing">
 Did: <counts: sources selected, jobs submitted, candidates pre-screened, items triaged>
 Credits: <used today> / <daily budget> · OpusClip month: <used> / <limit>
 Flagged: <new needs_attention items, one line each>

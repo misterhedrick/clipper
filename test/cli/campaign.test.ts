@@ -330,9 +330,12 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper campaign …", () => {
 
   it("has no command that can approve a clip, join or post; activating only under the verified-config rule", async () => {
     const help = (await cli("help")).output as { commands: Record<string, unknown> };
-    for (const name of Object.keys(help.commands).filter((n) => n !== "campaign activate")) {
+    // `guard post` is the hook that blocks OpusClip post calls unless they match a planned post; it posts nothing.
+    for (const name of Object.keys(help.commands).filter((n) => n !== "campaign activate" && n !== "guard post")) {
       expect(name).not.toMatch(/approve|activate|confirm|post|publish|join/);
     }
+    // Publishing is planned and tracked, never done, by the CLI: the person confirms each post in OpusClip.
+    expect(Object.keys(help.commands).filter((n) => n.startsWith("social "))).toEqual(["social plan", "social requested", "social sync", "social notify", "social list"]);
     await cli("campaign", "add", `https://contentrewards.com/discover/${MW4}`);
     const [row] = await db.select().from(campaigns).where(eq(campaigns.contentRewardsCampaignId, MW4));
     expect(row!.status).not.toBe("active");

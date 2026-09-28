@@ -22,4 +22,4 @@ For each candidate a person has `approved` (`clipper candidate list --status app
 2. `clipper candidate record-export <id> --url <export_url>`.
 3. `clipper package <id>`. This writes the Ready-to-Post bundle to R2 and refuses anything a person didn't approve.
 
-Export URLs expire. Record and package in the same run you exported.
+Export URLs expire. Record and package in the same run you exported. Then schedule it: [Post](post.md).

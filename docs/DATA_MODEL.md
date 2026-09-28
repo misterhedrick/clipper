@@ -102,12 +102,20 @@ Append-only audit log. Every status transition on `campaigns`, `source_jobs`, or
 
 ## `posts`
 
-Manual-posting tracking (README § "Post manually in version one").
+One row per clip per platform. Posts published through OpusClip (`clipper social …`, migration `0009`) go `planned → requested → scheduled → posted | failed`; `cancelled` frees the slot. Posts a reviewer records by hand are `posted` from the start.
 
 | Column | Type | Notes |
 |---|---|---|
 | `candidate_clip_id` | uuid not null, fk → candidate_clips.id | |
 | `platform` | text not null | `tiktok \| instagram \| youtube` |
+| `status` | text not null default `posted` | `planned \| requested \| scheduled \| posted \| failed \| cancelled` |
+| `post_account_id` | text | OpusClip social account ID; `account_handle` is its handle |
+| `publish_at` | timestamptz | the slot; indexed with `post_account_id` for spacing |
+| `post_params` | jsonb | the exact `opusclip_schedule_publish` input; the post guard compares against it |
+| `approval_url` | text | where the person confirms the post in OpusClip |
+| `opusclip_schedule_id` | text | from `opusclip_list_scheduled_posts` |
+| `failure_reason` | text | OpusClip's reason, or the schedule call's error |
+| `notified_at` | timestamptz | when the live link was sent to the person |
 | `url` | text | |
 | `posted_at` | timestamptz | |
 | `views` | int | |
