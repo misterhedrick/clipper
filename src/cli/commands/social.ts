@@ -1,6 +1,6 @@
 import { eq, inArray } from "drizzle-orm";
 import { campaigns } from "../../db/schema.js";
-import { cancelPost, linksToSend, markNotified, pendingApprovals, openPosts, planPosts, postsForClip, recordRequested, syncPosts } from "../../modules/posting/index.js";
+import { cancelPost, linksToSend, markNotified, pendingApprovals, SUBMIT_WINDOW_MINUTES, openPosts, planPosts, postsForClip, recordRequested, syncPosts } from "../../modules/posting/index.js";
 import { positional, readJsonInput, requiredOption, type Command, type CommandContext } from "../run.js";
 import { notifier, withReviewLink } from "./ops.js";
 
@@ -11,25 +11,33 @@ import { notifier, withReviewLink } from "./ops.js";
 
 const moduleCtx = (ctx: CommandContext) => ({ db: ctx.db(), actor: ctx.actor });
 
+const hhmm = (d: Date | null) => (d ? `${d.toISOString().slice(11, 16)} UTC` : "no time set");
+
 /** Sends live links the person hasn't had yet, grouped by campaign with its Content Rewards page. */
 async function sendLinks(ctx: CommandContext) {
   const db = ctx.db();
   const links = await linksToSend(db);
   if (!links.length) return { sent: 0 };
   const camps = await db.select().from(campaigns).where(inArray(campaigns.id, [...new Set(links.map((l) => l.campaignId))]));
-  const lines = ["Clips are live. Submit these links on Content Rewards:"];
+  const now = Date.now();
+  const due = links.map((l) => l.submitBy).filter((d): d is Date => !!d && d.getTime() > now);
+  const first = due.sort((a, b) => a.getTime() - b.getTime())[0];
+  const lines = [
+    `🚨 Live now. Submit on Whop (your profile → Joined → the campaign) within ${SUBMIT_WINDOW_MINUTES} minutes of posting${first ? `, by ${hhmm(first)}` : ""}:`,
+  ];
   for (const c of camps) {
-    lines.push("", `${c.title ?? "Campaign"}: ${c.contentRewardsUrl}`);
-    for (const l of links.filter((x) => x.campaignId === c.id)) lines.push(`• ${l.platform} ${l.account ?? ""} — ${l.title ?? l.candidateId}: ${l.url}`);
+    lines.push("", `${c.title ?? "Campaign"}:`);
+    for (const l of links.filter((x) => x.campaignId === c.id)) {
+      const late = l.submitBy && l.submitBy.getTime() <= now ? " (window has likely closed)" : l.submitBy ? ` (by ${hhmm(l.submitBy)})` : "";
+      lines.push(`• ${l.platform} ${l.account ?? ""}${late}: ${l.url}`);
+    }
   }
-  lines.push("", "Then mark each clip posted on its review page.");
+  lines.push("", "Then tap Mark posted on the clip's review page.");
   const n = notifier(ctx);
   await n.send(withReviewLink(lines.join("\n"), n.reviewUrl));
   await markNotified(db, links.map((l) => l.postId));
   return { sent: links.length, links };
 }
-
-const hhmm = (d: Date | null) => (d ? `${d.toISOString().slice(11, 16)} UTC` : "no time set");
 
 /** Sends the posts waiting for the person's confirmation to Discord, as one link. */
 async function sendApprovals(ctx: CommandContext) {
