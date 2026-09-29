@@ -20,6 +20,7 @@ import { loadJobWithCampaign, loadCandidateWithContext } from "../../db/helpers.
 import { validateCampaignConfig, type CampaignConfig } from "../campaign-config/index.js";
 import {
   CAPTION_CHECK,
+  ENGLISH_CHECK,
   runObjectiveChecks,
   validateCaption,
   visualCheckNames,
@@ -451,6 +452,7 @@ export async function rejectFailedCandidates(ctx: CandidatesCtx, filter: { campa
 
   const evidence = (clip: CandidateRow, name: string) => {
     if (name === "duration" && clip.durationMs !== null) return `duration (${Math.round(clip.durationMs / 1000)}s is outside the campaign's limits)`;
+    if (name === ENGLISH_CHECK && !currentVisualReview(clip)?.checks[name]) return `${name} (OpusClip wrote this clip's title and description in another language: "${clip.title ?? ""}")`;
     const seen = currentVisualReview(clip)?.checks[name]?.evidence;
     return seen ? `${name} (${seen})` : name;
   };
