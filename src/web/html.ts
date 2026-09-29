@@ -50,6 +50,23 @@ export function badge(outcome: string): Html {
   return html`<span class="badge ${tone}">${outcome.replace(/_/g, " ")}</span>`;
 }
 
+/**
+ * A list, table or long block collapsed behind a one-line summary, so a page
+ * fits on a phone without scrolling (the reviewer's request, 2026-09-29).
+ * `open` for the one section a person is most likely to act on.
+ */
+export function fold(summary: Html | string, body: Html | string, opts: { open?: boolean } = {}): Html {
+  return html`<details class="fold"${opts.open ? html` open` : ""}><summary>${summary}</summary><div class="fold-body">${body}</div></details>`;
+}
+
+/** "11 of 12 passed", plus failed / to-check badges: the summary line for a list of checks. */
+export function checkTally(results: [string, string][]): Html {
+  const passed = results.filter(([, v]) => v === "pass").length;
+  const failed = results.filter(([, v]) => v === "fail").length;
+  const toCheck = results.length - passed - failed;
+  return html`Checks: ${passed} of ${results.length} passed${failed ? html` <span class="badge bad">${failed} failed</span>` : ""}${toCheck ? html` <span class="badge warn">${toCheck} to check</span>` : ""}`;
+}
+
 export function page(opts: { title: string; reviewer?: string; flash?: { ok?: string; error?: string }; body: Html }): string {
   const nav = opts.reviewer
     ? html`<nav>
@@ -172,6 +189,15 @@ export function page(opts: { title: string; reviewer?: string; flash?: { ok?: st
   @media (min-width: 640px) { details { border-radius: 8px; padding: 14px; } }
   summary { cursor: pointer; font-weight: 600; color: var(--accent); user-select: none; }
   summary:hover { color: var(--accent-dark); }
+  /* Collapsed lists: one tap to open, a chevron that turns. */
+  details.fold { background: var(--card); padding: 0; }
+  details.fold > summary { list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 12px 36px 12px 14px; position: relative; color: var(--fg); }
+  details.fold > summary::-webkit-details-marker { display: none; }
+  details.fold > summary::after { content: "▾"; position: absolute; right: 14px; top: 12px; color: var(--muted, #888); transition: transform .2s; }
+  details.fold[open] > summary::after { transform: rotate(180deg); }
+  details.fold > summary .badge { margin: 0; font-size: .72rem; padding: 2px 8px; }
+  .fold-body { padding: 0 14px 12px; border-top: 1px solid var(--line); }
+  .fold-body > .card, .fold-body > table { margin-top: 10px; }
 </style>
 </head>
 <body>
