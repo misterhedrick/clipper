@@ -136,6 +136,7 @@ The **live database (Supabase)** holds one campaign as of 2026-09-24: **Charlie 
    3. ✅ A run re-queued the *Neighborly* job, uploaded it to OpusClip and submitted a 10-minute slice (10 credits, 2026-09-24). ✅ The next run collected 15 clips and pre-screened them (7 recommend, 5 hold, 3 reject) with caption drafts. Done: a run collects the clips (`candidate upsert`), pre-screens them and drafts captions.
    4. ✅ You approved a Boxabl clip; a run exported and packaged it (2026-09-27, `ready_to_post`).
    5. ✅ Posted on all three accounts 2026-09-28 (`clipper social plan` → guarded `opusclip_schedule_publish` → you confirmed in OpusClip → `social sync` sent the links). Missed Boxabl's 30-minute submit window; runs now watch until posts are live.
+   6. ✅ **First full end-to-end payout-eligible run, 2026-09-29:** 'Elon Musk's $50K Foldable Home' (Graham Stephan video; caption auto-fixed BOXABLE→BOXABL, trimmed to 19s on the reviewer's request) posted to TikTok, Instagram and YouTube at 13:31–13:32 UTC, links synced to Discord within a minute, all three submitted on Whop inside the 30-minute window.
 
 2. **Task 14:** end to end on a real campaign, twice, checking nothing duplicates.
 
