@@ -221,6 +221,7 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper social …", () => {
     expect(first.changes).toHaveLength(2);
     expect(first.unmatched).toHaveLength(1);
     expect(first.notified).toEqual({ sent: 0 });
+    expect(first.stillWaiting).toBe(3);
 
     const live = await sync({
       posts: [
@@ -232,7 +233,8 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper social …", () => {
     expect(live.notified.sent).toBe(1);
     expect(delivered).toHaveLength(1);
     expect(delivered[0]!.text).toContain("https://www.tiktok.com/@hedrick.clips/video/1");
-    expect(delivered[0]!.text).toContain("https://contentrewards.com/discover/cr-post");
+    expect(delivered[0]!.text).toContain("Whop (your profile → Joined");
+    expect(live.stillWaiting).toBe(0);
     const rows = Object.fromEntries((await db.select().from(posts)).map((p) => [p.platform, p]));
     expect(rows.tiktok).toMatchObject({ status: "posted", opusclipScheduleId: `s-${TIKTOK.postAccountId}` });
     expect(rows.instagram).toMatchObject({ status: "posted", url: null });

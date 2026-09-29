@@ -54,6 +54,13 @@ export const MAX_PER_DAY = 4;
  */
 export const LEAD_MINUTES = 5;
 
+/**
+ * How soon after a post goes live its link must be submitted on Whop (Content
+ * Rewards campaigns live there: profile → Joined). Boxabl allows 30 minutes
+ * (seen 2026-09-28, when three posts missed it); the tightest seen is used for all.
+ */
+export const SUBMIT_WINDOW_MINUTES = 30;
+
 const HOUR = 3_600_000;
 /** Statuses that hold a slot. */
 const HOLDS_SLOT: readonly PostStatus[] = ["planned", "requested", "scheduled", "posted"];
@@ -373,7 +380,12 @@ export async function syncPosts(ctx: PostingCtx, input: unknown) {
     }
   });
 
-  return { checked: listed.length, changes, unmatched, newLinks: await linksToSend(ctx.db) };
+  // Posts not live yet: while any remain, the operator keeps syncing (the submit window is short).
+  const [waiting] = await ctx.db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(posts)
+    .where(inArray(posts.status, ["requested", "scheduled"]));
+  return { checked: listed.length, changes, unmatched, stillWaiting: waiting?.n ?? 0, newLinks: await linksToSend(ctx.db) };
 }
 
 // --- links for the person -----------------------------------------------------------------
@@ -389,7 +401,18 @@ export async function linksToSend(db: Db) {
     .orderBy(asc(posts.postedAt));
   return rows
     .filter((r) => r.post.url)
-    .map((r) => ({ postId: r.post.id, candidateId: r.clip.id, title: r.clip.title, platform: r.post.platform, account: r.post.accountHandle, url: r.post.url!, campaignId: r.jobCampaignId }));
+    .map((r) => ({
+      postId: r.post.id,
+      candidateId: r.clip.id,
+      title: r.clip.title,
+      platform: r.post.platform,
+      account: r.post.accountHandle,
+      url: r.post.url!,
+      campaignId: r.jobCampaignId,
+      postedAt: r.post.postedAt,
+      // OpusClip reports the slot, not the moment it went live, so this errs early.
+      submitBy: r.post.postedAt ? new Date(r.post.postedAt.getTime() + SUBMIT_WINDOW_MINUTES * 60_000) : null,
+    }));
 }
 
 /** Marks links as sent, after the notification went out. */
