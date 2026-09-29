@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "../../db/client.js";
 import { audit } from "../../db/audit.js";
-import { candidateClips, posts, sourceJobs, type PostPlatform, type PostStatus } from "../../db/schema.js";
+import { candidateClips, posts, sourceJobs, statusEvents, type PostPlatform, type PostStatus } from "../../db/schema.js";
 import { loadCandidateWithContext } from "../../db/helpers.js";
 import { canonical } from "../submissions/index.js";
 import { validateCampaignConfig } from "../campaign-config/index.js";
@@ -44,9 +44,16 @@ export const POST_ACCOUNTS: readonly PostAccount[] = [
   { platform: "youtube", postAccountId: "6abade79ae74eec7a3837564", handle: "@hedrickclips" },
 ];
 
-/** Spacing per account: at most one post every 3 hours, and 4 in any 24 hours. */
+/**
+ * Spacing guidance per account: one post every 3 hours, 4 in any 24 hours.
+ * Advisory since 2026-09-29: the person decides when to post ("post next"),
+ * so a clip goes out right away and `social plan` only warns when it's closer
+ * than this to that account's other posts. Two posts on one account are never
+ * put in the same minute: MIN_SEPARATION_MINUTES apart at least.
+ */
 export const MIN_GAP_HOURS = 3;
 export const MAX_PER_DAY = 4;
+export const MIN_SEPARATION_MINUTES = 10;
 /**
  * The earliest slot leaves the person this long to confirm the post in OpusClip.
  * An approval link stops working once its slot has passed, so the links go to
@@ -66,22 +73,25 @@ const HOUR = 3_600_000;
 /** Statuses that hold a slot. */
 const HOLDS_SLOT: readonly PostStatus[] = ["planned", "requested", "scheduled", "posted"];
 
-/**
- * The earliest time at or after `earliest` that keeps an account within its
- * spacing: no other post within MIN_GAP_HOURS, and fewer than MAX_PER_DAY posts
- * in the 24 hours either side.
- */
+/** The earliest time at or after `earliest` at least MIN_SEPARATION_MINUTES from every taken slot. */
 export function nextSlot(taken: Date[], earliest: Date): Date {
+  const gap = MIN_SEPARATION_MINUTES * 60_000;
   const times = taken.map((d) => d.getTime()).sort((a, b) => a - b);
-  const fits = (t: number) =>
-    times.every((x) => Math.abs(x - t) >= MIN_GAP_HOURS * HOUR) &&
-    times.filter((x) => x > t - 24 * HOUR && x <= t).length < MAX_PER_DAY &&
-    times.filter((x) => x >= t && x < t + 24 * HOUR).length < MAX_PER_DAY;
   const start = earliest.getTime();
-  const candidates = [start, ...times.flatMap((x) => [x + MIN_GAP_HOURS * HOUR, x + 24 * HOUR])].filter((t) => t >= start).sort((a, b) => a - b);
-  for (const t of candidates) if (fits(t)) return new Date(t);
-  // Unreachable: past the last taken slot + 24h everything fits.
-  return new Date(Math.max(start, (times.at(-1) ?? start) + 24 * HOUR));
+  const candidates = [start, ...times.map((x) => x + gap)].filter((t) => t >= start).sort((a, b) => a - b);
+  for (const t of candidates) if (times.every((x) => Math.abs(x - t) >= gap)) return new Date(t);
+  return new Date(Math.max(start, (times.at(-1) ?? start) + gap));
+}
+
+/** Spacing guidance an account would break by posting at `at` (advisory; see MIN_GAP_HOURS). */
+export function spacingWarnings(taken: Date[], at: Date): string[] {
+  const t = at.getTime();
+  const out: string[] = [];
+  const recent = taken.filter((d) => Math.abs(d.getTime() - t) < MIN_GAP_HOURS * HOUR);
+  if (recent.length) out.push(`${recent.length} other post${recent.length === 1 ? "" : "s"} within ${MIN_GAP_HOURS}h`);
+  const day = taken.filter((d) => d.getTime() > t - 24 * HOUR && d.getTime() <= t).length;
+  if (day + 1 > MAX_PER_DAY) out.push(`${day + 1} posts in 24h (guideline ${MAX_PER_DAY})`);
+  return out;
 }
 
 /** Slots are whole minutes, in UTC, as OpusClip takes them. */
@@ -154,6 +164,7 @@ export async function planPosts(ctx: PostingCtx, id: string) {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext('clipper:post-slots'))`);
     const mine = await tx.select().from(posts).where(eq(posts.candidateClipId, id));
     const planned: (typeof posts.$inferSelect)[] = [];
+    const warnings: string[] = [];
     for (const account of POST_ACCOUNTS) {
       const existing = mine.find((p) => p.platform === account.platform && HOLDS_SLOT.includes(p.status));
       if (existing) {
@@ -164,7 +175,9 @@ export async function planPosts(ctx: PostingCtx, id: string) {
         .select({ at: posts.publishAt })
         .from(posts)
         .where(and(eq(posts.postAccountId, account.postAccountId), inArray(posts.status, [...HOLDS_SLOT])));
-      const publishAt = toIso(nextSlot(taken.flatMap((t) => (t.at ? [t.at] : [])), earliest));
+      const takenAt = taken.flatMap((t) => (t.at ? [t.at] : []));
+      const publishAt = toIso(nextSlot(takenAt, earliest));
+      for (const w of spacingWarnings(takenAt, new Date(publishAt))) warnings.push(`${account.platform} ${account.handle}: ${w}`);
       const postParams = buildPostParams(account, clipInfo, publishAt);
       const [created] = await tx
         .insert(posts)
@@ -182,8 +195,49 @@ export async function planPosts(ctx: PostingCtx, id: string) {
       await audit(tx, { entityType: "candidate_clip", entityId: id, action: "plan_post", actor: ctx.actor, details: { postId: created!.id, platform: account.platform, publishAt } });
       planned.push(created!);
     }
-    return { id, posts: planned.map(postView) };
+    return { id, posts: planned.map(postView), ...(warnings.length ? { spacingWarnings: warnings } : {}) };
   });
+}
+
+// --- queue -------------------------------------------------------------------------------
+
+/**
+ * Approved clips waiting to be posted, oldest approval first: the order "post
+ * next" takes them in (decided 2026-09-29: nothing is scheduled ahead; the person
+ * says when). A clip leaves the queue once any of its posts is planned or later.
+ */
+export async function postQueue(db: Db) {
+  const rows = await db
+    .select({ clip: candidateClips, campaignId: sourceJobs.campaignId })
+    .from(candidateClips)
+    .innerJoin(sourceJobs, eq(sourceJobs.id, candidateClips.sourceJobId))
+    .where(inArray(candidateClips.status, ["approved", "exporting", "ready_to_post"]));
+  if (!rows.length) return { queue: [] };
+  const ids = rows.map((r) => r.clip.id);
+  const busy = new Set(
+    (await db.select({ id: posts.candidateClipId }).from(posts).where(and(inArray(posts.candidateClipId, ids), inArray(posts.status, [...HOLDS_SLOT])))).map(
+      (p) => p.id,
+    ),
+  );
+  const approvals = await db
+    .select({ id: statusEvents.entityId, at: statusEvents.createdAt })
+    .from(statusEvents)
+    .where(and(inArray(statusEvents.entityId, ids), eq(statusEvents.toStatus, "approved")));
+  const approvedAt = new Map<string, Date>();
+  for (const a of approvals) if (!approvedAt.has(a.id) || a.at < approvedAt.get(a.id)!) approvedAt.set(a.id, a.at);
+  const queue = rows
+    .filter((r) => !busy.has(r.clip.id))
+    .sort((a, b) => (approvedAt.get(a.clip.id)?.getTime() ?? 0) - (approvedAt.get(b.clip.id)?.getTime() ?? 0))
+    .map((r, i) => ({
+      position: i + 1,
+      candidateId: r.clip.id,
+      title: r.clip.title,
+      campaignId: r.campaignId,
+      status: r.clip.status,
+      packaged: !!r.clip.packageKey,
+      approvedAt: approvedAt.get(r.clip.id)?.toISOString() ?? null,
+    }));
+  return { queue };
 }
 
 // --- guard -----------------------------------------------------------------------------
