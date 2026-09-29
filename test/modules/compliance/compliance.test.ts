@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { validateCampaignConfig, type CampaignConfig } from "../../../src/modules/campaign-config/index.js";
-import { normalizeAspect, runObjectiveChecks, validateCaption } from "../../../src/modules/compliance/index.js";
+import { looksNonEnglish, normalizeAspect, runObjectiveChecks, validateCaption } from "../../../src/modules/compliance/index.js";
 import { validConfig } from "../../helpers/config.js";
 
 const config = (mutate: (c: Record<string, any>) => void = () => {}): CampaignConfig => {
@@ -41,8 +41,24 @@ describe("objective checks", () => {
       required_overlay: "manual_review_required",
       required_on_screen_text: "manual_review_required",
       caption_compliance: "manual_review_required",
+      english_language: "manual_review_required",
       visual_quality: "manual_review_required",
     });
+  });
+
+  it("fails a clip OpusClip described in another language, and leaves anything else to the visual review", () => {
+    // Real OpusClip output from a Turkish creator's Boxabl tour (2026-09-29).
+    const turkish = {
+      title: "Türkiye'den Çıkan Katlanabilir Tablet: Trade Mike İncelemesi!",
+      description: "On beş dakikada katlanabilen, yenilikçi bir teknolojiyle tanışın. Trade Mike markasının bu harika ürününü yakından inceliyoruz.",
+    };
+    expect(runObjectiveChecks(turkish, config()).english_language).toBe("fail");
+    const english = { title: "Boxable: The Future of Affordable, Portable Homes", description: "A look inside the foldable Casita and how it ships to you in a single day." };
+    expect(runObjectiveChecks(english, config()).english_language).toBe("manual_review_required");
+    expect(looksNonEnglish("Geleceğin Evleri: Kendi Enerjini Üreten Yaşam Alanları ve daha fazlası burada")).toBe(true);
+    expect(looksNonEnglish("未来的房子可以折叠并在一天内送达你的家门口")).toBe(true);
+    expect(looksNonEnglish("Tiny home tour")).toBeUndefined();
+    expect(looksNonEnglish("This is the house that folds up and ships to you in a day")).toBe(false);
   });
 
   it("reads aspect names, ratios and pixel sizes", () => {

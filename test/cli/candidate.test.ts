@@ -134,7 +134,7 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper candidate …", () => {
     });
 
     it("prescreen records an advisory verdict and changes no status", async () => {
-      stdin = JSON.stringify({ framesChecked: 20, summary: "Portrait gameplay", checks: { aspect_ratio: { result: "pass", evidence: "9:16 frames" } } });
+      stdin = JSON.stringify({ framesChecked: 20, summary: "Portrait gameplay", checks: { aspect_ratio: { result: "pass", evidence: "9:16 frames" }, english_language: { result: "pass", evidence: "English commentary and captions" } } });
       await out("candidate", "visual-review", id, "--file", "-");
       expect(await out("candidate", "prescreen", id, "--verdict", "recommend", "--notes", "Clutch round, on-brief")).toMatchObject({
         status: "awaiting_review",
@@ -200,6 +200,7 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper candidate …", () => {
     const allPass = {
       aspect_ratio: { result: "pass", evidence: "Every frame is 9:16" },
       required_on_screen_text: { result: "pass", evidence: "BOXABL sign at 0:21" },
+      english_language: { result: "pass", evidence: "English speech; captions in English throughout" },
       no_other_brand_watermarks: { result: "fail", evidence: "Creator's channel logo bottom-left 0:00-0:03" },
     };
     beforeEach(async () => {
@@ -217,7 +218,7 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper candidate …", () => {
         id,
         opusclipClipId: "P123.c1",
         visualReview: null,
-        visualChecks: ["aspect_ratio", "required_on_screen_text", "no_other_brand_watermarks"],
+        visualChecks: ["aspect_ratio", "required_on_screen_text", "english_language", "no_other_brand_watermarks"],
       });
       expect(await out("candidate", "show", "nope")).toMatchObject({ error: { code: "invalid_argument" } });
     });
@@ -225,7 +226,7 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper candidate …", () => {
     it("records a result and evidence for exactly the visual checks", async () => {
       stdin = review({ aspect_ratio: allPass.aspect_ratio });
       expect(await out("candidate", "visual-review", id, "--file", "-")).toMatchObject({
-        error: { code: "invalid_argument", message: expect.stringContaining("missing required_on_screen_text, no_other_brand_watermarks") },
+        error: { code: "invalid_argument", message: expect.stringContaining("missing required_on_screen_text, english_language, no_other_brand_watermarks") },
       });
       stdin = review({ ...allPass, duration: { result: "pass", evidence: "looks fine" } });
       expect(await out("candidate", "visual-review", id, "--file", "-")).toMatchObject({
@@ -299,6 +300,28 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper candidate …", () => {
       expect(await clip("P123.c2")).toMatchObject({ status: "awaiting_review" });
       // Nothing left to do: running it again changes nothing.
       expect(await out("candidate", "reject-failed")).toMatchObject({ count: 0 });
+    });
+
+    it("fails a clip OpusClip wrote up in another language, and rejects it under the standing rule once pre-screened reject", async () => {
+      const turkish = {
+        stage: "COMPLETE",
+        clips: [
+          {
+            ...fixture.clips[0],
+            clip_id: "P123.tr",
+            title: "Geleceğin Evleri: Kendi Enerjini Üreten Yaşam Alanları",
+            description: "Kendi elektriğini üreten, suyunu ayırıp atığını vakumlayan ve uzun süre dayanan bu evi yakından inceliyoruz.",
+          },
+        ],
+      };
+      await upsert(turkish);
+      const tr = await clip("P123.tr");
+      expect(tr.checkResults).toMatchObject({ english_language: "fail" });
+      expect((await clip("P123.c1")).checkResults).toMatchObject({ english_language: "manual_review_required" });
+      await out("candidate", "prescreen", tr.id, "--verdict", "reject", "--notes", "Turkish speech and captions; the accounts are English");
+      const res = await out("candidate", "reject-failed");
+      expect(res).toMatchObject({ count: 1, rejected: [{ id: tr.id, failed: ["english_language"], reason: expect.stringContaining("Geleceğin Evleri") }] });
+      expect(await clip("P123.c1")).toMatchObject({ status: "awaiting_review" });
     });
 
     it("a reject verdict without a failed check is left for a person", async () => {
