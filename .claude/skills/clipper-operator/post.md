@@ -27,6 +27,9 @@ An approval link stops working once its slot has passed. For each post still `re
 
 ## 3. Hand it to the person
 
+Give the person every posting time in US Eastern (e.g. "12:32 PM ET"), never UTC; the CLI's Discord messages already do. OpusClip's tools still take and return UTC.
+
+
 Under "Needs you" in the report, give **one combined link** for all the approvals (`https://clip.opus.pro/agent-approvals#<token>,<token>,...`, tokens from each `approval_url`), and list what it covers: account, platform and time. The links are web pages: on a phone they open in the browser (signed in to OpusClip), not in the OpusClip app. A post the person hasn't confirmed before its time may not go out. Say so if a slot is close.
 
 Once links are live and sent, the person submits them on **Whop** (their profile → **Joined** tab → the campaign) within 30 minutes of posting, and taps **Mark posted** on the clip's page.

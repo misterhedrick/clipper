@@ -11,7 +11,9 @@ import { notifier, withReviewLink } from "./ops.js";
 
 const moduleCtx = (ctx: CommandContext) => ({ db: ctx.db(), actor: ctx.actor });
 
-const hhmm = (d: Date | null) => (d ? `${d.toISOString().slice(11, 16)} UTC` : "no time set");
+/** Times for the person are US Eastern (their request, 2026-09-29), e.g. "12:32 PM ET". */
+const ET = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" });
+const hhmm = (d: Date | null) => (d ? `${ET.format(d)} ET` : "no time set");
 
 /** Sends live links the person hasn't had yet, grouped by campaign with its Content Rewards page. */
 async function sendLinks(ctx: CommandContext) {
