@@ -2,11 +2,11 @@
 
 Goal: save the reviewer time. Sort candidates into recommend / hold / reject with a reason, and attach a compliant caption draft. **This is advice. A person approves in the web app.**
 
-For each candidate in `awaiting_review` without a prescreen (`clipper candidate list --status awaiting_review`), in this order. Skip straight to a `reject` verdict only when a code check already failed (e.g. `duration`); everything else gets looked at.
+For each candidate in `awaiting_review` without a prescreen (`clipper candidate list --status awaiting_review`), in this order. Skip straight to a `reject` verdict only when a code check already failed (e.g. `duration`, or `english_language`: OpusClip wrote the clip's title and description in another language); everything else gets looked at.
 
 ## 1. Look at the clip (required)
 
-A recommend or hold vouches for what's on screen, so the CLI refuses those verdicts until the clip's current render has a visual review. The review settles every check the clip data can't: the campaign's `review.requiredChecks`, `required_on_screen_text`, `required_overlay` and `aspect_ratio`. Duration and the caption stay code's.
+A recommend or hold vouches for what's on screen, so the CLI refuses those verdicts until the clip's current render has a visual review. The review settles every check the clip data can't: the campaign's `review.requiredChecks`, `required_on_screen_text`, `required_overlay`, `aspect_ratio`, and `english_language` (the speech and burned-in captions are English; every clip, every campaign). Duration and the caption stay code's.
 
 1. `clipper candidate frames <id>`: downloads the preview and writes frames to a local folder (`outDir`). It returns `visualChecks`, the exact checks to judge, and contact `sheets` whose `times` list each frame's second, left to right then top to bottom. The opening is sampled densely because briefs judge the first 2 seconds.
 2. Read the campaign's rules: `clipper campaign show <campaignId>` (`requirements`, `review.requiredChecks`, `extraction.unexpressedRules`).
