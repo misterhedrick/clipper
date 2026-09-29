@@ -7,7 +7,7 @@ Every packaged clip goes to each account in `docs/SOCIAL_ACCOUNTS.md` through Op
 If any posts are waiting (`clipper social list`), read their status first:
 
 1. `opusclip_list_scheduled_posts` with `startAt` = 7 days ago and `endAt` = 30 days ahead (ISO 8601 UTC).
-2. `clipper social sync --file -` with that result on stdin. Confirmed posts become `scheduled`, live ones `posted` with their link, failed ones `failed` (with OpusClip's reason). New live links go to the person on Discord, with each campaign's Content Rewards page, once each.
+2. `clipper social sync --file -` with that result on stdin. Confirmed posts become `scheduled`, live ones `posted` with their link, failed ones `failed` (with OpusClip's reason). New live links go to the person on Discord once each, with where to submit (Whop → profile → Joined) and the 30-minute deadline. OpusClip lists posts by platform, not account.
 
 A post that is `posted` without a link is TikTok Business lagging: sync again next run. For a `failed` post, report the reason. Running `social plan` again gives that account a fresh slot, but do that only when the reason is fixable (e.g. an account reconnected), not in a loop.
 
@@ -19,6 +19,7 @@ For each `ready_to_post` clip (`clipper candidate list --status ready_to_post`):
 2. For each post still `planned`: call `opusclip_schedule_publish` with exactly its `params`. A hook (`clipper guard post`) blocks anything else, including `opusclip_create_post_task`: every post takes a slot.
 3. Record the answer: `clipper social requested <postId> --approval-url <approval_url>`, or `--error "<message>"` when the call failed (that frees the slot).
 4. As soon as every post is recorded: `clipper social alert`. It sends the person one Discord link that approves them all. The first slot is only 5 minutes out, so do this immediately, before anything else in the run.
+5. **Stay and watch until they're live.** A link must be submitted on Whop within 30 minutes of the post going live (Boxabl, seen 2026-09-28: three posts missed it because the links came hours later). So don't end the run: carry on with the other steps, and about once a minute after the first slot, call `opusclip_list_scheduled_posts` for the clip's project and pipe it to `clipper social sync --file -`. Each live link goes to Discord the moment it appears, with its deadline. Stop when `stillWaiting` is 0, or after 30 minutes past the last slot. Report any post still not live (TikTok links can lag; Instagram took over an hour once).
 
 ## Expired approvals
 
@@ -28,4 +29,4 @@ An approval link stops working once its slot has passed. For each post still `re
 
 Under "Needs you" in the report, give **one combined link** for all the approvals (`https://clip.opus.pro/agent-approvals#<token>,<token>,...`, tokens from each `approval_url`), and list what it covers: account, platform and time. The links are web pages: on a phone they open in the browser (signed in to OpusClip), not in the OpusClip app. A post the person hasn't confirmed before its time may not go out. Say so if a slot is close.
 
-Once links are live and sent, the person submits them on Content Rewards and taps **Mark posted** on the clip's page.
+Once links are live and sent, the person submits them on **Whop** (their profile → **Joined** tab → the campaign) within 30 minutes of posting, and taps **Mark posted** on the clip's page.
