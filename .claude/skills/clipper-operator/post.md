@@ -1,6 +1,8 @@
 # Post
 
-Every packaged clip goes to each account in `docs/SOCIAL_ACCOUNTS.md` through OpusClip. You schedule; **the person confirms each post in the OpusClip app**, and OpusClip posts nothing until they do. You never post, and you never mark a clip posted: the person does that on the review page.
+**Nothing is scheduled ahead (decided 2026-09-29).** Approved clips wait in a queue (`clipper social queue`, oldest approval first) until the person says **"post next"** (or "post the next N"). Only then do you schedule, and only the clip(s) at the front of the queue: the person has to be there to confirm in OpusClip and submit on Whop within 30 minutes, so posting is on their word, never on a run's own. A normal operator run only does step 1 (sync) and keeps queued clips exported and packaged (see [Export and package](collect.md#export-and-package)).
+
+Every clip goes to each account in `docs/SOCIAL_ACCOUNTS.md` through OpusClip. You schedule; **the person confirms each post in the OpusClip app**, and OpusClip posts nothing until they do. You never post, and you never mark a clip posted: the person does that on the review page.
 
 ## 1. Sync what's already out
 
@@ -11,11 +13,12 @@ If any posts are waiting (`clipper social list`), read their status first:
 
 A post that is `posted` without a link is TikTok Business lagging: sync again next run. For a `failed` post, report the reason. Running `social plan` again gives that account a fresh slot, but do that only when the reason is fixable (e.g. an account reconnected), not in a loop.
 
-## 2. Schedule new clips
+## 2. "Post next": schedule the front of the queue
 
-For each `ready_to_post` clip (`clipper candidate list --status ready_to_post`):
+Only when the person says "post next". Take the first entry of `clipper social queue` (or the first N for "post the next N"):
 
-1. `clipper social plan <candidateId>`. It returns one post per account, each with its slot (at least 3 hours after that account's last post, at most 4 a day) and the exact `params`. Running it again returns the same posts.
+0. If it isn't packaged yet (`packaged: false`): export and package it first (`opusclip_export_clip`, `candidate record-export`, `clipper package`).
+1. `clipper social plan <candidateId>`. It returns one post per account, 15 minutes out, with the exact `params`, plus `spacingWarnings` when an account posted within 3 hours or would pass 4 in a day. Those are advice: mention them in one line, don't hold the post. Running it again returns the same posts.
 2. For each post still `planned`: call `opusclip_schedule_publish` with exactly its `params`. A hook (`clipper guard post`) blocks anything else, including `opusclip_create_post_task`: every post takes a slot.
 3. Record the answer: `clipper social requested <postId> --approval-url <approval_url>`, or `--error "<message>"` when the call failed (that frees the slot).
 4. As soon as every post is recorded: `clipper social alert`. It sends the person one Discord link that approves them all. The first slot is only 15 minutes out, so run `social plan` only once the clip is exported and packaged, send all the schedule requests straight after it, and alert immediately, before anything else in the run. If a slot passes before the requests are all out, `social cancel` them and plan again.

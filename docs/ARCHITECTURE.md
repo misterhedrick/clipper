@@ -142,7 +142,8 @@ clipper candidate reject <id...> | --campaign <id> --reason "..." --requested-by
 
 # Operations
 clipper package <candidateId>                       approved + export URL recorded → R2 bundle → ready_to_post (refuses anything not approved by a human)
-clipper social plan <candidateId>                   ready_to_post + packaged → one planned post per account (docs/SOCIAL_ACCOUNTS.md), each with a slot and exact opusclip_schedule_publish params
+clipper social queue                                (read-only) approved clips waiting to post, oldest approval first; "post next" takes the first
+clipper social plan <candidateId>                   ready_to_post + packaged → one planned post per account (docs/SOCIAL_ACCOUNTS.md), 15 min out, exact opusclip_schedule_publish params, spacing warnings (advisory)
 clipper social requested <postId> (--approval-url <u> | --error <m>)   record what schedule_publish answered (an error frees the slot)
 clipper social alert                                send one Discord message with a single link approving every post still in time
 clipper social cancel <postId> --reason "..."         drop a planned/requested post never confirmed (e.g. its approval link expired); frees the slot

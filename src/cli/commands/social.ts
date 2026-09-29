@@ -1,6 +1,6 @@
 import { eq, inArray } from "drizzle-orm";
 import { campaigns } from "../../db/schema.js";
-import { cancelPost, linksToSend, markNotified, pendingApprovals, SUBMIT_WINDOW_MINUTES, openPosts, planPosts, postsForClip, recordRequested, syncPosts } from "../../modules/posting/index.js";
+import { cancelPost, linksToSend, markNotified, pendingApprovals, postQueue, SUBMIT_WINDOW_MINUTES, openPosts, planPosts, postsForClip, recordRequested, syncPosts } from "../../modules/posting/index.js";
 import { positional, readJsonInput, requiredOption, type Command, type CommandContext } from "../run.js";
 import { notifier, withReviewLink } from "./ops.js";
 
@@ -60,9 +60,14 @@ async function sendApprovals(ctx: CommandContext) {
 }
 
 export const socialCommands: Record<string, Command> = {
+  queue: {
+    summary: "(read-only) Approved clips waiting to be posted, oldest approval first. \"Post next\" takes the first; nothing is scheduled ahead.",
+    usage: "",
+    run: (ctx) => postQueue(ctx.db()),
+  },
   plan: {
     summary:
-      "Plan a ready_to_post clip's posts: one per account (docs/SOCIAL_ACCOUNTS.md), each in its account's next free slot (≥3h apart, ≤4 a day), with the exact opusclip_schedule_publish params. Idempotent.",
+      "Plan a ready_to_post clip's posts: one per account (docs/SOCIAL_ACCOUNTS.md), 15 minutes out (spacing guidance is only warned about), with the exact opusclip_schedule_publish params. Only when the person says \"post next\". Idempotent.",
     usage: "<candidateId>",
     run: (ctx) => planPosts(moduleCtx(ctx), positional(ctx, 0, "candidateId")),
   },
