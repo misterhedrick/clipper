@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "mcp__OpusClip__opusclip_list_social_accounts",
-      "mcp__OpusClip__opusclip_list_scheduled_posts"
+      "mcp__OpusClip__opusclip_list_scheduled_posts",
+      "mcp__OpusClip__opusclip_submit_project",
+      "mcp__OpusClip__opusclip_create_upload_link",
+      "mcp__OpusClip__opusclip_edit_clip",
+      "mcp__OpusClip__opusclip_export_clip",
+      "mcp__OpusClip__opusclip_schedule_publish"
     ],
     "deny": [
       "mcp__OpusClip__opusclip_unschedule_publish",
