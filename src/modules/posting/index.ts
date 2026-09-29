@@ -50,9 +50,10 @@ export const MAX_PER_DAY = 4;
 /**
  * The earliest slot leaves the person this long to confirm the post in OpusClip.
  * An approval link stops working once its slot has passed, so the links go to
- * Discord the moment they exist (`social alert`). 5 minutes, the person's call (2026-09-28).
+ * Discord the moment they exist (`social alert`). 15 minutes, the person's call (2026-09-29;
+ * 5 minutes left too little time to send three requests and confirm them).
  */
-export const LEAD_MINUTES = 5;
+export const LEAD_MINUTES = 15;
 
 /**
  * How soon after a post goes live its link must be submitted on Whop (Content
