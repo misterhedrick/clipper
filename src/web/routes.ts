@@ -21,6 +21,7 @@ import {
   type ReviewCtx,
 } from "../modules/review/index.js";
 import { BUNDLE_FILES, type BundleStore } from "../modules/packaging/index.js";
+import { postQueue } from "../modules/posting/index.js";
 import { createSession, readCookie, REVIEWER_NAME, SESSION_COOKIE, sessionCookie, tokenMatches, verifySession } from "./auth.js";
 import { badge, checkTally, fold, html, page, safeUrl, seconds, when, type Html } from "./html.js";
 
@@ -680,6 +681,8 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
 
     scope.get("/posts", async (req, reply) => {
       const rows = await candidatesByStatus(db, ["approved", "exporting", "ready_to_post", "posted"]);
+      const { queue } = await postQueue(db);
+      const titleOf = new Map(rows.map((r) => [r.clip.id, r]));
       const group = (s: string) => rows.filter((r) => r.clip.status === s);
       const section = (title: string, items: typeof rows, note: string, open = false) =>
         fold(
@@ -693,7 +696,18 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
         reply,
         "Posting",
         html`<h1>Posting</h1>
-          ${section("Ready to post", group("ready_to_post"), "Nothing packaged yet.", true)}
+          <p class="muted">Nothing is scheduled ahead. Say <strong>"post next"</strong> to the operator when you're ready to submit on Whop within 30 minutes; it posts the first clip in the queue.</p>
+          ${fold(
+            `Queue (${queue.length})`,
+            queue.length
+              ? html`<ol>${queue.map((q) => {
+                  const r = titleOf.get(q.candidateId);
+                  return html`<li><a href="/candidates/${q.candidateId}">${q.title ?? q.candidateId}</a> <span class="muted">· ${r?.campaign.title ?? ""} · ${r ? seconds(r.clip.durationMs) : ""}${q.packaged ? "" : " · not packaged yet"}</span></li>`;
+                })}</ol>`
+              : html`<p class="muted">Empty. Approve clips on the review queue and they line up here.</p>`,
+            { open: true },
+          )}
+          ${section("Ready to post", group("ready_to_post"), "Nothing packaged yet.")}
           ${section("Approved, being exported and packaged", [...group("approved"), ...group("exporting")], "None.")}
           ${section("Posted", group("posted"), "None yet.")}`,
       );

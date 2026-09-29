@@ -7,7 +7,7 @@ import { createDb, type Db } from "../../src/db/client.js";
 import { campaigns, candidateClips, posts } from "../../src/db/schema.js";
 import { transition } from "../../src/db/transition.js";
 import { markPosted } from "../../src/modules/review/index.js";
-import { MAX_PER_DAY, MIN_GAP_HOURS, nextSlot, POST_ACCOUNTS, youtubeTitle } from "../../src/modules/posting/index.js";
+import { MAX_PER_DAY, MIN_GAP_HOURS, MIN_SEPARATION_MINUTES, nextSlot, POST_ACCOUNTS, spacingWarnings, youtubeTitle } from "../../src/modules/posting/index.js";
 import { resetTestDatabase, TEST_DATABASE_URL, truncateAll } from "../helpers/db.js";
 import { validConfig } from "../helpers/config.js";
 import { insertCampaign, insertSourceJob } from "../helpers/fixtures.js";
@@ -20,19 +20,23 @@ const [TIKTOK, INSTAGRAM, YOUTUBE] = POST_ACCOUNTS as unknown as [(typeof POST_A
 
 describe("nextSlot", () => {
   const at = (h: number) => new Date(NOW.getTime() + h * HOUR);
-  it("takes the earliest time when the account is free", () => {
+  const min = (m: number) => new Date(NOW.getTime() + m * 60_000);
+  it("takes the earliest time: the person decides when to post", () => {
     expect(nextSlot([], NOW)).toEqual(NOW);
-    expect(nextSlot([at(-4)], NOW)).toEqual(NOW);
+    expect(nextSlot([at(-1)], NOW)).toEqual(NOW);
   });
-  it("keeps posts on one account at least 3 hours apart", () => {
-    expect(nextSlot([at(-1)], NOW)).toEqual(at(MIN_GAP_HOURS - 1));
-    expect(nextSlot([at(1)], NOW)).toEqual(at(4));
-    expect(nextSlot([at(2), at(5)], NOW)).toEqual(at(8));
+  it("never puts two posts on one account in the same few minutes", () => {
+    expect(nextSlot([min(3)], NOW)).toEqual(min(3 + MIN_SEPARATION_MINUTES));
+    expect(nextSlot([min(-5)], NOW)).toEqual(min(5));
   });
-  it("allows at most 4 posts in any 24 hours", () => {
-    const four = [0, 3, 6, 9].map((h) => at(h));
-    expect(nextSlot(four, NOW)).toEqual(at(24));
-    expect(MAX_PER_DAY).toBe(4);
+});
+
+describe("spacingWarnings", () => {
+  const at = (h: number) => new Date(NOW.getTime() + h * HOUR);
+  it("warns, without blocking, when a post breaks the 3h / 4-a-day guidance", () => {
+    expect(spacingWarnings([at(-4)], NOW)).toEqual([]);
+    expect(spacingWarnings([at(-1)], NOW)).toEqual([`1 other post within ${MIN_GAP_HOURS}h`]);
+    expect(spacingWarnings([at(-20), at(-15), at(-10), at(-5)], NOW)).toEqual([`${MAX_PER_DAY + 1} posts in 24h (guideline ${MAX_PER_DAY})`]);
   });
 });
 
@@ -122,14 +126,26 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper social …", () => {
     expect(await db.select().from(posts)).toHaveLength(3);
   });
 
-  it("spaces a second clip 3 hours after the first on each account", async () => {
+  it("posts a second clip right away, apart from the first and with a spacing warning", async () => {
     const first = await out("social", "plan", candidateId);
+    expect(first.spacingWarnings).toBeUndefined();
     const second = await out("social", "plan", await readyClip("c2", "file-2", "P2"));
     for (const platform of ["tiktok", "instagram", "youtube"]) {
       const a = first.posts.find((p: any) => p.platform === platform);
       const b = second.posts.find((p: any) => p.platform === platform);
-      expect(new Date(b.publishAt).getTime() - new Date(a.publishAt).getTime()).toBe(MIN_GAP_HOURS * HOUR);
+      expect(new Date(b.publishAt).getTime() - new Date(a.publishAt).getTime()).toBe(MIN_SEPARATION_MINUTES * 60_000);
     }
+    expect(second.spacingWarnings).toHaveLength(3);
+  });
+
+  it("queues approved clips oldest approval first, and drops a clip once it's planned", async () => {
+    const second = await readyClip("c2", "file-2", "P2");
+    let q = (await out("social", "queue")).queue;
+    expect(q.map((x: any) => x.candidateId)).toEqual([candidateId, second]);
+    expect(q[0]).toMatchObject({ position: 1, status: "ready_to_post", packaged: true });
+    await out("social", "plan", candidateId);
+    q = (await out("social", "queue")).queue;
+    expect(q.map((x: any) => x.candidateId)).toEqual([second]);
   });
 
   it("refuses clips that aren't packaged and ready to post", async () => {

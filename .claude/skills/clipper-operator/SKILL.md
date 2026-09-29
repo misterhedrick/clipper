@@ -34,7 +34,7 @@ When a person asks for an operator run, go through these in order. Skip any step
 | 2 | [Collect clips](collect.md) | jobs in `project_created` / `processing` |
 | 3 | [Look at, then pre-screen candidates](prescreen.md) | candidates in `awaiting_review` without a prescreen, or in `needs_edit`. Every recommend/hold needs a visual review of the clip's frames first. Finish with `clipper candidate reject-failed` |
 | 4 | [Export and package](collect.md#export-and-package) | candidates a person `approved` |
-| 4b | [Post](post.md) | clips in `ready_to_post`, or posts waiting in `clipper social list` |
+| 4b | [Post](post.md) | posts waiting in `clipper social list` (sync them). Schedule new posts **only** when the person says "post next": the front of `clipper social queue` |
 | 5 | [Source footage](source-footage.md) | `active` campaigns: new files in registered sources, or no sources registered |
 | 6 | [Submit](submit.md) | source jobs in `detected` / `queued` |
 | 7 | [Onboard, verify, activate](onboard-campaign.md) | campaigns in `discovered`, or `pending_confirmation` with a proposed config not yet verified. A campaign activated here goes straight on to steps 5–6 |
@@ -48,7 +48,7 @@ First run `clipper attention notify`. It sends one digest of anything newly need
 
 ```
 Operator run — <date>
-Needs you: <decisions waiting on a person, each with a link/ID and your recommendation, including every OpusClip approval link to confirm, or "nothing">
+Needs you: <decisions waiting on a person, each with a link/ID and your recommendation, including every OpusClip approval link to confirm, and how many clips are queued to post ("3 clips queued: say post next when you can submit on Whop within 30 min"), or "nothing">
 Did: <counts: sources selected, jobs submitted, candidates pre-screened, items triaged>
 Credits: <used today> / <daily budget> · OpusClip month: <used> / <limit>
 Flagged: <new needs_attention items, one line each>
