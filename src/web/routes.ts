@@ -22,7 +22,7 @@ import {
 } from "../modules/review/index.js";
 import { BUNDLE_FILES, type BundleStore } from "../modules/packaging/index.js";
 import { createSession, readCookie, REVIEWER_NAME, SESSION_COOKIE, sessionCookie, tokenMatches, verifySession } from "./auth.js";
-import { badge, html, page, safeUrl, seconds, when, type Html } from "./html.js";
+import { badge, checkTally, fold, html, page, safeUrl, seconds, when, type Html } from "./html.js";
 
 // The review web app: the one place a person confirms campaigns, decides clips
 // and records posts. Every route except /login requires a signed-in reviewer,
@@ -287,15 +287,16 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
           </div>`;
       } else if (c.status === "active" || c.status === "paused") {
         const paused = c.status === "paused";
-        actions = html`<h2>Confirmed config</h2>
-          <p class="muted">Confirmed by ${c.configConfirmedBy ?? "?"} ${when(c.configConfirmedAt)}</p>
-          <form method="post" action="/campaigns/${c.id}/edit-config" class="card">
+        actions = html`${fold(
+          html`Confirmed config <span class="muted">· by ${c.configConfirmedBy ?? "?"} ${when(c.configConfirmedAt)}</span>`,
+          html`<form method="post" action="/campaigns/${c.id}/edit-config">
             <p>Change it here if something should work differently (e.g. <code>captionsEnabled</code>, <code>originalAudioOnly</code>). It applies to videos submitted from now on; clips already made keep their settings.</p>
             <label for="config">Config (JSON)</label>
             <textarea id="config" name="config" rows="24" spellcheck="false">${JSON.stringify(cfg, null, 2)}</textarea>
             <label class="check"><input type="checkbox" name="checked" value="yes" required> I checked this against the brief</label>
             <button>Save config</button>
-          </form>
+          </form>`,
+          )}
           <form method="post" action="/campaigns/${c.id}/${paused ? "resume" : "pause"}" class="card">
             <label for="reason">${paused ? "Resume" : "Pause"}: reason (optional)</label>
             <input id="reason" name="reason">
@@ -303,7 +304,7 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
             ${paused ? "" : html`<p class="muted">Paused campaigns get no new OpusClip submissions.</p>`}
           </form>`;
       } else if (Object.keys(cfg).length) {
-        actions = html`<h2>Config</h2><pre class="card">${JSON.stringify(cfg, null, 2)}</pre>`;
+        actions = fold("Config", html`<pre>${JSON.stringify(cfg, null, 2)}</pre>`);
       }
 
       return view(
@@ -341,10 +342,12 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
               <button class="secondary">Delete campaign</button>
             </form>
           </details>
-          <h2>History</h2>
-          <div class="card scroll"><table>
-            ${d.events.map((e) => html`<tr><td class="muted">${when(e.createdAt)}</td><td>${e.fromStatus ?? "·"} → ${e.toStatus}</td><td>${e.actor}</td><td>${e.reason ?? ""}</td></tr>`)}
-          </table></div>`,
+          ${fold(
+            `History (${d.events.length} change${d.events.length === 1 ? "" : "s"})`,
+            html`<div class="scroll"><table>
+              ${d.events.map((e) => html`<tr><td class="muted">${when(e.createdAt)}</td><td>${e.fromStatus ?? "·"} → ${e.toStatus}</td><td>${e.actor}</td><td>${e.reason ?? ""}</td></tr>`)}
+            </table></div>`,
+          )}`,
       );
     });
 
@@ -458,8 +461,8 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
                 </span>
               </summary>
               <div class="qbody">
-                <p class="muted clip-meta">${job.sourceName ?? job.sourceKey}${checks.length ? html` · ${passed}/${checks.length} checks pass` : ""}</p>
-                ${checks.length ? html`<ul class="checks">${checks.map(([k, v]) => html`<li>${badge(v)}<span>${k.replace(/_/g, " ")}</span></li>`)}</ul>` : ""}
+                <p class="muted clip-meta">${job.sourceName ?? job.sourceKey}</p>
+                ${checks.length ? fold(checkTally(checks), html`<ul class="checks">${checks.map(([k, v]) => html`<li>${badge(v)}<span>${k.replace(/_/g, " ")}</span></li>`)}</ul>`) : ""}
                 ${verdict ? html`<p class="verdict ${tone}"><strong>Operator:</strong> ${clip.prescreenNotes ?? ""}</p>` : html`<p class="muted">Not pre-screened yet.</p>`}
                 <p class="actions"><a class="button" href="/candidates/${clip.id}">Open clip to review →</a></p>
               </div>
@@ -516,10 +519,15 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
             <div class="card">
               <p><strong>Duration</strong> ${seconds(clip.durationMs)} · <strong>Score</strong> ${clip.opusclipScore ?? "?"}
                 ${clip.opusclipSubScores ? html`<span class="muted">(${Object.entries(clip.opusclipSubScores).map(([k, v]) => `${k} ${v}`).join(", ")})</span>` : ""}</p>
-              <p><strong>Checks</strong><br>${checks.map(
-                ([k, v]) =>
-                  html`${badge(v)}<span class="muted">${k.replace(/_/g, " ")}</span>${visual?.checks[k] ? html`<br><small>${visual.checks[k].evidence}</small>` : ""}<br>`,
-              )}</p>
+              ${fold(
+                checkTally(checks),
+                html`<ul class="checks detail">${[...checks]
+                  .sort(([, a], [, b]) => (a === "fail" ? 0 : a === "pass" ? 2 : 1) - (b === "fail" ? 0 : b === "pass" ? 2 : 1))
+                  .map(
+                    ([k, v]) =>
+                      html`<li>${badge(v)}<span>${k.replace(/_/g, " ")}${visual?.checks[k] ? html`<br><small class="muted">${visual.checks[k].evidence}</small>` : ""}</span></li>`,
+                  )}</ul>`,
+              )}
               <p><strong>Operator's look at the frames</strong><br>${visual
                 ? html`${visual.summary} <span class="muted">(${visual.framesChecked} frames, ${visual.at.slice(0, 16).replace("T", " ")} UTC)</span>`
                 : html`<span class="muted">${clip.visualReview ? "out of date: the clip was edited since" : "not reviewed yet"}</span>`}</p>
@@ -528,9 +536,9 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
             </div>
           </div>
 
-          <h2>Check against the brief</h2>
-          <div class="card">
-            ${req_
+          ${fold(
+            "The brief's rules",
+            html`${req_
               ? html`<ul>
                   ${list("Caption must contain", req_.requiredCaptionLines)}
                   ${list("Tags", req_.requiredTags)}
@@ -540,8 +548,8 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
                   <li><strong>Extra hashtags allowed:</strong> ${req_.maxAdditionalHashtags}</li>
                   ${unexpressed.map((r) => html`<li>${r}</li>`)}
                 </ul>`
-              : html`<p class="bad">The campaign's config doesn't validate.</p>`}
-          </div>
+              : html`<p class="bad">The campaign's config doesn't validate.</p>`}`,
+          )}
 
           <h2>Caption</h2>
           <div class="card">
@@ -618,12 +626,17 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
             : ""}
 
           ${clip.editLog.length
-            ? html`<h2>Edits made for you</h2><div class="card">${clip.editLog.map((e) => html`<p class="muted">${when(e.at)}</p><p>${e.reason}</p><pre>${JSON.stringify(e.ops)}</pre>`)}</div>`
+            ? fold(
+                `Edits made (${clip.editLog.length})`,
+                html`${clip.editLog.map((e) => html`<p class="muted">${when(e.at)}</p><p>${e.reason}</p><pre>${JSON.stringify(e.ops)}</pre>`)}`,
+              )
             : ""}
-          <h2>History</h2>
-          <div class="card scroll"><table>
-            ${d.events.map((e) => html`<tr><td class="muted">${when(e.createdAt)}</td><td>${e.fromStatus ?? "·"} → ${e.toStatus}</td><td>${e.actor}</td><td>${e.reason ?? ""}</td></tr>`)}
-          </table></div>`,
+          ${fold(
+            `History (${d.events.length} change${d.events.length === 1 ? "" : "s"})`,
+            html`<div class="scroll"><table>
+              ${d.events.map((e) => html`<tr><td class="muted">${when(e.createdAt)}</td><td>${e.fromStatus ?? "·"} → ${e.toStatus}</td><td>${e.actor}</td><td>${e.reason ?? ""}</td></tr>`)}
+            </table></div>`,
+          )}`,
       );
     });
 
@@ -668,16 +681,19 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
     scope.get("/posts", async (req, reply) => {
       const rows = await candidatesByStatus(db, ["approved", "exporting", "ready_to_post", "posted"]);
       const group = (s: string) => rows.filter((r) => r.clip.status === s);
-      const section = (title: string, items: typeof rows, note: string) =>
-        html`<h2>${title} (${items.length})</h2>
-          ${items.length ? "" : html`<p class="muted">${note}</p>`}
-          ${items.map(({ clip, campaign }) => html`<div class="card"><a href="/candidates/${clip.id}">${clip.title ?? clip.opusclipClipId}</a> <span class="muted">· ${campaign.title} · ${seconds(clip.durationMs)}</span></div>`)}`;
+      const section = (title: string, items: typeof rows, note: string, open = false) =>
+        fold(
+          `${title} (${items.length})`,
+          html`${items.length ? "" : html`<p class="muted">${note}</p>`}
+          ${items.map(({ clip, campaign }) => html`<p><a href="/candidates/${clip.id}">${clip.title ?? clip.opusclipClipId}</a> <span class="muted">· ${campaign.title} · ${seconds(clip.durationMs)}</span></p>`)}`,
+          { open: open && items.length > 0 },
+        );
       return view(
         req,
         reply,
         "Posting",
         html`<h1>Posting</h1>
-          ${section("Ready to post", group("ready_to_post"), "Nothing packaged yet.")}
+          ${section("Ready to post", group("ready_to_post"), "Nothing packaged yet.", true)}
           ${section("Approved, being exported and packaged", [...group("approved"), ...group("exporting")], "None.")}
           ${section("Posted", group("posted"), "None yet.")}`,
       );
