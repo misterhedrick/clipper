@@ -112,12 +112,15 @@ export const STANDING_RULES = {
   reject_failed_checks: "standing rule: failed checks + pre-screen reject",
   /** A config the operator verified against the campaign page and brief, every field matching (decided 2026-09-27). */
   activate_verified_config: "standing rule: config self-verified against the campaign page and brief",
+  /** A clip whose every post OpusClip reports live with a link (decided 2026-09-30). */
+  mark_posted_when_live: "standing rule: every post live with a link",
 } as const;
 export type StandingRule = keyof typeof STANDING_RULES;
 
 const byStandingRule: { [R in StandingRule]: { entity: EntityType; to: string } } = {
   reject_failed_checks: { entity: "candidate_clip", to: "rejected" },
   activate_verified_config: { entity: "campaign", to: "active" },
+  mark_posted_when_live: { entity: "candidate_clip", to: "posted" },
 };
 
 /** Human actors are recorded as `reviewer:<identity>`. Anything else is automation. */

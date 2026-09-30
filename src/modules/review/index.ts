@@ -312,7 +312,8 @@ export async function recordPost(
 /**
  * The person's confirmation that a clip is out: ready_to_post → posted, once at
  * least one of its posts is live with a link (recorded by `clipper social sync`
- * from OpusClip, or by hand above). Automation never makes this move.
+ * from OpusClip, or by hand above). Automation makes this move only under the
+ * standing rule in posting's `markLiveClipsPosted`: every post live with a link.
  */
 export async function markPosted(ctx: ReviewCtx, id: string) {
   requireHuman(ctx);

@@ -612,7 +612,7 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
                     )}</table>`
                   : html`<p class="muted">No posts yet. The next operator run schedules this clip on every account; you confirm each post in OpusClip.</p>`}
                 ${clip.status === "ready_to_post" && d.posts.some((p) => p.status === "posted" && p.url)
-                  ? html`<form method="post" action="/candidates/${clip.id}/mark-posted"><button>Mark posted</button> <span class="muted">Once you've submitted the links on Content Rewards.</span></form>`
+                  ? html`<form method="post" action="/candidates/${clip.id}/mark-posted"><button>Mark posted</button> <span class="muted">Only needed if a post failed or is still waiting: the next sync marks it once every post is live with a link.</span></form>`
                   : ""}
                 <details><summary class="muted">Record a post by hand</summary>
                   <form method="post" action="/candidates/${clip.id}/posts">
