@@ -4,10 +4,11 @@ import { cancelPost, linksToSend, markNotified, pendingApprovals, postQueue, SUB
 import { positional, readJsonInput, requiredOption, type Command, type CommandContext } from "../run.js";
 import { notifier, withReviewLink } from "./ops.js";
 
-// Publishing through OpusClip. There is deliberately no command that posts or
-// marks a clip posted: the operator schedules with the params `plan` issues (the
-// post guard checks them), the person confirms each post in OpusClip, and the
-// person marks the clip posted on the review page.
+// Publishing through OpusClip. There is deliberately no command that posts: the
+// operator schedules with the params `plan` issues (the post guard checks them)
+// and the person confirms each post in OpusClip. `sync` then marks a clip posted
+// once every one of its posts is live with a link (standing rule, 2026-09-30);
+// until then the person can still mark it on the review page.
 
 const moduleCtx = (ctx: CommandContext) => ({ db: ctx.db(), actor: ctx.actor });
 
@@ -34,7 +35,7 @@ async function sendLinks(ctx: CommandContext) {
       lines.push(`• ${l.platform} ${l.account ?? ""}${late}: ${l.url}`);
     }
   }
-  lines.push("", "Then tap Mark posted on the clip's review page.");
+  lines.push("", "The clip is marked posted by itself once every account's link is in.");
   const n = notifier(ctx);
   await n.send(withReviewLink(lines.join("\n"), n.reviewUrl));
   await markNotified(db, links.map((l) => l.postId));
@@ -95,7 +96,7 @@ export const socialCommands: Record<string, Command> = {
   },
   sync: {
     summary:
-      "Store an opusclip_list_scheduled_posts result: confirmed posts → scheduled, live ones → posted with their link, failed → failed. Then sends any new live links to the person (skip with --no-notify).",
+      "Store an opusclip_list_scheduled_posts result: confirmed posts → scheduled, live ones → posted with their link, failed → failed. Marks a clip posted once all its posts are live with links. Then sends any new live links to the person (skip with --no-notify).",
     usage: "--file <posts.json | -> [--no-notify]",
     options: { file: { type: "string" }, "no-notify": { type: "boolean" } },
     run: async (ctx) => {

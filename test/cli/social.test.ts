@@ -1,10 +1,10 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { run } from "../../src/cli/run.js";
 import { createDb, type Db } from "../../src/db/client.js";
-import { campaigns, candidateClips, posts } from "../../src/db/schema.js";
+import { campaigns, candidateClips, posts, statusEvents } from "../../src/db/schema.js";
 import { transition } from "../../src/db/transition.js";
 import { markPosted } from "../../src/modules/review/index.js";
 import { MAX_PER_DAY, MIN_GAP_HOURS, MIN_SEPARATION_MINUTES, nextSlot, POST_ACCOUNTS, spacingWarnings, youtubeTitle } from "../../src/modules/posting/index.js";
@@ -264,11 +264,55 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper social …", () => {
     expect((await db.select().from(candidateClips).where(eq(candidateClips.id, candidateId)))[0]!.status).toBe("ready_to_post");
   });
 
-  it("leaves marking the clip posted to a person, once a post is live", async () => {
+  it("leaves marking the clip posted to a person while only some posts are live", async () => {
     await out("social", "plan", candidateId);
     await expect(markPosted({ db, actor: "reviewer:test" }, candidateId)).rejects.toThrow(/No live post/);
-    await sync({ posts: [{ clip_id: "c1", post_account_id: TIKTOK.postAccountId, status: "posted", post_url: "https://www.tiktok.com/@hedrick.clips/video/1" }] }, "--no-notify");
+    const res = await sync({ posts: [{ clip_id: "c1", post_account_id: TIKTOK.postAccountId, status: "posted", post_url: "https://www.tiktok.com/@hedrick.clips/video/1" }] }, "--no-notify");
+    expect(res.markedPosted).toEqual([]);
     await expect(markPosted({ db, actor: "claude-operator" }, candidateId)).rejects.toThrow();
     expect(await markPosted({ db, actor: "reviewer:test" }, candidateId)).toMatchObject({ status: "posted" });
+  });
+
+  describe("standing rule: every post live with a link → the clip is posted", () => {
+    const url = { tiktok: "https://www.tiktok.com/@hedrick.clips/video/1", instagram: "https://www.instagram.com/reel/abc", youtube: "https://www.youtube.com/watch?v=abc" };
+    const live = (account: string, post_url?: string) => ({ clip_id: "c1", post_account_id: account, status: "posted", ...(post_url ? { post_url } : {}) });
+    const clipStatus = async () => (await db.select().from(candidateClips).where(eq(candidateClips.id, candidateId)))[0]!.status;
+
+    it("marks the clip posted once the last link arrives, recording the rule and the links", async () => {
+      await out("social", "plan", candidateId);
+      // All three live, but Instagram's link hasn't arrived yet: wait.
+      const first = await sync({ posts: [live(TIKTOK.postAccountId, url.tiktok), live(INSTAGRAM.postAccountId), live(YOUTUBE.postAccountId, url.youtube)] }, "--no-notify");
+      expect(first.markedPosted).toEqual([]);
+      expect(await clipStatus()).toBe("ready_to_post");
+
+      const second = await sync({ posts: [live(INSTAGRAM.postAccountId, url.instagram)] }, "--no-notify");
+      expect(second.markedPosted).toEqual([{ id: candidateId, links: expect.arrayContaining([`instagram: ${url.instagram}`]) }]);
+      expect(await clipStatus()).toBe("posted");
+      const [ev] = await db.select().from(statusEvents).where(and(eq(statusEvents.entityId, candidateId), eq(statusEvents.toStatus, "posted")));
+      expect(ev).toMatchObject({ actor: "claude-operator", reason: expect.stringMatching(/tiktok: .*every post live with a link/) });
+
+      // Idempotent: another sync changes nothing, and the person's button reports it as done.
+      expect((await sync({ posts: [] }, "--no-notify")).markedPosted).toEqual([]);
+      expect(await markPosted({ db, actor: "reviewer:test" }, candidateId)).toMatchObject({ alreadyPosted: true });
+    });
+
+    it("leaves a clip with a failed post for the person", async () => {
+      await out("social", "plan", candidateId);
+      const res = await sync(
+        { posts: [live(TIKTOK.postAccountId, url.tiktok), live(INSTAGRAM.postAccountId, url.instagram), { clip_id: "c1", post_account_id: YOUTUBE.postAccountId, status: "failed" }] },
+        "--no-notify",
+      );
+      expect(res.markedPosted).toEqual([]);
+      expect(await clipStatus()).toBe("ready_to_post");
+    });
+
+    it("catches up a clip that went fully live before the rule existed, on the next sync", async () => {
+      await out("social", "plan", candidateId);
+      for (const [platform, u] of Object.entries(url)) {
+        await db.update(posts).set({ status: "posted", url: u, postedAt: new Date() }).where(and(eq(posts.candidateClipId, candidateId), eq(posts.platform, platform as never)));
+      }
+      expect((await sync({ posts: [] }, "--no-notify")).markedPosted).toEqual([expect.objectContaining({ id: candidateId })]);
+      expect(await clipStatus()).toBe("posted");
+    });
   });
 });
