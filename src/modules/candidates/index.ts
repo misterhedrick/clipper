@@ -20,6 +20,7 @@ import { loadJobWithCampaign, loadCandidateWithContext } from "../../db/helpers.
 import { validateCampaignConfig, type CampaignConfig } from "../campaign-config/index.js";
 import {
   CAPTION_CHECK,
+  DOUBLE_CAPTIONS_CHECK,
   ENGLISH_CHECK,
   runObjectiveChecks,
   validateCaption,
@@ -489,7 +490,8 @@ export async function rejectFailedCandidates(ctx: CandidatesCtx, filter: { campa
 /**
  * opusclip_edit_clip ops the operator may use to fix a failed check on its own
  * (standing rule, 2026-09-27). They correct or cut what's there; nothing that
- * adds content (text overlays, emoji) or hides a problem (turning captions off).
+ * adds content (text overlays, emoji) or hides a problem. Turning captions off
+ * is allowed only as the fix for a failed no_double_captions check (see below).
  */
 export const AUTO_FIX_OPS = [
   "replace_phrase",
@@ -514,11 +516,27 @@ const failedChecksOf = (clip: CandidateRow) =>
 
 const autoFixCount = (clip: CandidateRow) => clip.editLog.filter((e) => e.fixes?.length).length;
 
+/**
+ * `set_captions` off, as the fix for a failed no_double_captions check: the source
+ * already has captions burned in, so OpusClip's are switched off (the person's rule,
+ * 2026-09-30). Never switching captions on, and never to fix anything else.
+ */
+const isCaptionsOff = (op: unknown) => {
+  const o = op as { op?: unknown; enabled?: unknown };
+  return o?.op === "set_captions" && o.enabled === false;
+};
+
 /** Why an automatic fix with these ops isn't allowed on this clip, or null when it is. */
 function autoFixRefusal(clip: CandidateRow, ops: unknown[]): string | null {
   if (clip.status !== "awaiting_review") return `it's ${clip.status}; automatic fixes are only for clips awaiting review`;
-  if (!failedChecksOf(clip).length) return "it has no failed check to fix";
-  const bad = ops.map((o) => (o as { op?: unknown })?.op).filter((op) => !(AUTO_FIX_OPS as readonly unknown[]).includes(op));
+  const failed = failedChecksOf(clip);
+  if (!failed.length) return "it has no failed check to fix";
+  const doubleCaptions = failed.includes(DOUBLE_CAPTIONS_CHECK);
+  if (ops.some(isCaptionsOff) && !doubleCaptions) return `turning captions off only fixes a failed ${DOUBLE_CAPTIONS_CHECK} check`;
+  const bad = ops
+    .filter((o) => !(doubleCaptions && isCaptionsOff(o)))
+    .map((o) => (o as { op?: unknown })?.op)
+    .filter((op) => !(AUTO_FIX_OPS as readonly unknown[]).includes(op));
   if (bad.length) return `ops ${bad.map(String).join(", ")} aren't allowed in an automatic fix (allowed: ${AUTO_FIX_OPS.join(", ")})`;
   if (autoFixCount(clip) >= MAX_AUTO_FIXES) return `it already had ${MAX_AUTO_FIXES} automatic fixes`;
   return null;

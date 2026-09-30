@@ -3,6 +3,7 @@ import { loadConfig } from "../../config.js";
 import { campaigns, sourceJobs, SOURCE_JOB_STATUSES, type SourceJobStatus } from "../../db/schema.js";
 import { resolveCampaign } from "../../modules/campaigns/index.js";
 import { creditsSummary, reconcileUsage } from "../../modules/credits/index.js";
+import { markSourceCaptions } from "../../modules/sourcing/index.js";
 import { recordFailure, recordProject, reserve, uploadSource, validateSource } from "../../modules/submissions/index.js";
 import { positional, requiredOption, UsageError, type Command, type CommandContext } from "../run.js";
 
@@ -98,6 +99,14 @@ export const sourceCommands: Record<string, Command> = {
     usage: "<sourceJobId> --project-id <id>",
     options: { "project-id": { type: "string" } },
     run: (ctx) => recordProject(submitCtx(ctx), positional(ctx, 0, "sourceJobId"), requiredOption(ctx, "project-id")),
+  },
+  "mark-captions": {
+    summary:
+      "Record that a selected video already has burned-in captions (seen in its clips' frames): later submissions go in with OpusClip's captions off, and double captions on its clips may be switched off as an automatic fix.",
+    usage: '<sourceJobId> --reason "..."',
+    options: { reason: { type: "string" } },
+    run: (ctx) =>
+      markSourceCaptions({ db: ctx.db(), actor: ctx.actor }, positional(ctx, 0, "sourceJobId"), requiredOption(ctx, "reason")),
   },
   "record-failure": {
     summary: "Record a failed opusclip_submit_project call: releases the reservation; transient errors re-queue (max 3).",
