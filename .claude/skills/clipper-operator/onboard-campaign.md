@@ -6,7 +6,8 @@ Goal: turn a freeform brief into a campaign config, check it against the campaig
 
 `clipper campaign brief <id>` returns the doc text (each link shown inline as `words <url>`), every hyperlink in it, `linkedDocs` to read next, and the campaign's `referenceMaterials`. Also read:
 - every entry in `linkedDocs` (sub-briefs: caption rules, content guides) with `clipper campaign brief <id> --doc <url>`;
-- nothing that needs sign-in. A Notion or other page that holds the real rules but can't be read is a `campaign flag` with the link.
+- public Notion pages too: when a campaign has no Google Doc, `campaign brief` reads a Notion rules page from its reference materials, and `--doc` takes Notion links. Text in link previews and databases isn't included (the output says so): if the rules seem to continue there, flag it.
+- nothing that needs sign-in. A page that holds the real rules but can't be read (`not_public`, or a host other than Google Docs and Notion) is a `campaign flag` with the link.
 
 ## 2. Draft the config
 
@@ -23,6 +24,7 @@ Write `config.json` matching the `CampaignConfig` schema (`docs/DATA_MODEL.md`).
 | `requirements.disclosureLines` | FTC section | If the brief allows one of several (`#Ad`/`#Sponsored`), put the one you'll use and note the alternatives in the reason |
 | `requirements.maxAdditionalHashtags` | "no more than N hashtags" | |
 | `requirements.requiredOnScreenText` | text-hook rules ("add a hook in the first 2 seconds") | Checked by a person (`manual_review_required`) |
+| — | "no AI edits", "no Opus Clips or any auto-clipping tool" | **Not taken on.** Every clip here is cut by OpusClip. `clipper campaign flag <id> --reason "bans auto-clipping tools (OpusClip): not taken on"`, quoting the rule. |
 | `requirements.requiredOverlayAssetIds` | logo / watermark / overlay rules | **Always empty.** A brief that requires a logo, watermark or overlay isn't taken on: `clipper campaign flag <id> --reason "requires <what> overlay: not taken on (logo campaigns need a desktop-only OpusClip template)"` instead of proposing a config. The CLI rejects a config with overlays anyway. |
 | `review.autoApprove` | — | Always `false`. Validation rejects anything else. |
 | `extraction.fieldConfidence` | — | `high` only if the brief states it explicitly. Inferred or defaulted values are `low`. |
