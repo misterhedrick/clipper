@@ -3,7 +3,7 @@
 Goal: recommend campaigns worth running through this pipeline. A person decides which to join. Joining happens on Content Rewards under their account.
 
 1. `clipper campaign scout` lists discover-page campaigns not yet tracked, with parsed metadata.
-2. For each plausible one, `clipper campaign brief <contentRewardsUrl>` reads the actual brief. It works on untracked campaigns and writes nothing. Titles are unreliable.
+2. For each plausible one, `clipper campaign brief <contentRewardsUrl>` reads the actual brief (a Google Doc, or a public Notion rules page). It works on untracked campaigns and writes nothing. Titles are unreliable. Don't recommend a campaign whose rules you haven't read: an unread brief is where the deal-breakers hide.
 3. Classify it. Only **LF** fits this pipeline:
    - **lf**: long-form footage exists (stream VODs, podcasts, specials, gameplay recordings, a creator's channel) and the job is cutting it into shorts.
    - **ugc**: the clipper films or records original content (persona pages, own gameplay, split-screen reactions).
@@ -15,7 +15,8 @@ Goal: recommend campaigns worth running through this pipeline. A person decides 
    - **Footage host matters for reliability.** YouTube, Content Rewards uploads, Vimeo and Frame.io are fetched by OpusClip itself and never stall. Google Drive has to be copied through our server, and busy campaign folders hit Google's daily download limit ("Quota exceeded"), which delays that campaign by a day at a time. Drive campaigns are still fine to recommend (most campaigns use Drive), but: when two campaigns are otherwise close, rank the non-Drive one higher; and if no `active` campaign has non-Drive footage, recommend at least one that does (if any fits), so a blocked Drive folder never leaves the pipeline with nothing to submit.
    - Payout per 1K views and max per clip. Budget remaining is `budgetCents` against spend where visible.
    - **Logo, watermark or overlay required → skip it.** If the brief asks for a logo, watermark, brand overlay, CTA graphic or overlay pack on the video, it's not a fit: those need an OpusClip brand template, which can only be edited on a desktop, and this pipeline is run from a phone. Don't recommend it; mention it in one line as skipped for that reason. Text the clipper writes (a hook, a caption) is fine.
-   - Requirements this setup can't meet: dedicated page, audience tier, a new account, an application.
+   - **Auto-clipping banned → skip it.** "No Opus Clips", "no auto-clipping tools", "no AI edits" rules out this pipeline, which cuts every clip with OpusClip (Curious Mike, 2026-09-30). AI captions alone being allowed doesn't change that.
+   - Requirements this setup can't meet: dedicated page, audience tier, a new account, an application. The listing's `requiresApplication` isn't reliable (Michael Sartain's said `false` and had a waiting list, 2026-09-30): say "may have a waiting list" rather than "no application".
    - Rules that would cause most OpusClip output to be rejected, e.g. "gameplay must appear in the first 4 seconds" or heavy editing requirements.
 5. Recommend at most five, ranked, one line each: *why it fits, what it needs from a person (join / apply / dedicated page), the expected footage host (say "Drive: can hit Google's download limit" for Drive)*. Include the Content Rewards URL.
 6. Don't `campaign add` anything during scouting unless the person asked you to. Adding is their call.

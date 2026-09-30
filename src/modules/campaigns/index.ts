@@ -22,7 +22,7 @@ import {
   type ConnectorDeps,
   type ListedCampaign,
 } from "../campaign-connector/index.js";
-import { parseGoogleDocUrl, readGoogleDoc, type ReaderDeps } from "../brief-reader/index.js";
+import { briefDocId, parseNotionPageUrl, readBriefDoc, type ReaderDeps } from "../brief-reader/index.js";
 import { CONFIG_FIELDS, validateCampaignConfig, type CampaignConfig } from "../campaign-config/index.js";
 
 export class CampaignsError extends Error {
@@ -243,18 +243,23 @@ export async function readCampaignBrief(ctx: Ctx & { reader?: ReaderDeps }, ref:
   const source = await briefSource(ctx, ref);
   const { campaign, referenceMaterials } = source;
 
-  const target = docUrl ?? source.guidelineDocUrl;
+  // A Google Doc brief wins; failing that, a Notion rules page among the reference materials.
+  const target =
+    docUrl ?? source.guidelineDocUrl ?? referenceMaterials.find((m) => parseNotionPageUrl(m.url))?.url ?? null;
   if (!target) {
     return {
       campaign,
       doc: null,
-      note: "No Google Doc brief among this campaign's reference materials. Read what's listed below, or flag the campaign.",
+      note: "No Google Doc or Notion brief among this campaign's reference materials. Read what's listed below, or flag the campaign.",
       referenceMaterials,
       linkedDocs: [],
     };
   }
-  const doc = await readGoogleDoc(target, ctx.reader);
-  const linkedDocs = doc.links.filter((l) => parseGoogleDocUrl(l.url) && parseGoogleDocUrl(l.url) !== doc.docId);
+  const doc = await readBriefDoc(target, ctx.reader);
+  const linkedDocs = doc.links.filter((l) => {
+    const id = briefDocId(l.url);
+    return id !== null && id !== doc.docId;
+  });
   return { campaign, doc, referenceMaterials, linkedDocs };
 }
 

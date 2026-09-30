@@ -98,7 +98,7 @@ clipper campaign scout [--all]                  (r) discover-page campaigns (rat
 clipper campaign add <contentRewardsUrl>            track a campaign (status: discovered); runs campaign-connector
 clipper campaign show <id>                      (r) campaign row + config + footage sources + counts
 clipper campaign list [--status s]              (r)
-clipper campaign brief <id> [--doc <url>]       (r) guideline doc text + every hyperlink in it (HTML export), plus referenceMaterials; --doc reads a linked sub-doc
+clipper campaign brief <id> [--doc <url>]       (r) brief text + every hyperlink in it (Google Doc HTML export, or a public Notion rules page when there's no Doc), plus referenceMaterials; --doc reads a linked Google Doc or Notion page
 clipper campaign classify <id> --type <lf|ugc|music|slideshow|unclear> --reason "..."
 clipper campaign propose-config <id> --file config.json   validate (zod) + store draft; status → pending_confirmation
 clipper campaign flag <id> --reason "..."           status → needs_attention (announced by `attention notify`)
@@ -182,7 +182,7 @@ src/
   cli/                      `clipper` entrypoint + one file per command group
   modules/
     campaign-connector/     Content Rewards URL → metadata (built)
-    brief-reader/           guideline doc text + hyperlinks (HTML export), following Google Docs sub-links one level
+    brief-reader/           brief text + hyperlinks: Google Docs (HTML export) and public Notion pages; lists linked Docs/Notion pages to read next
     footage-sources/        URL → kind classification; Drive folder / YouTube feed listing
     credits/                credit ledger: reserve / release / reconcile, budget checks
     compliance/             objective checks + caption requirement validation (pure functions)

@@ -94,6 +94,23 @@ Hyperlinks come wrapped as `https://www.google.com/url?q=<real url>&...`; unwrap
 
 This only works if the doc is actually public ("anyone with the link can view"). If it returns 401 or redirects to sign-in instead of the document, treat that as `campaign.status = needs_attention` with reason `guideline_doc_not_public` — per README, never attempt to authenticate around this.
 
+### Rules page (Notion)
+
+Some campaigns keep their rules on a public Notion page instead of a Google Doc (Curious Mike, Coinbase × Valorant). The page's HTML is rendered in the browser and holds no text, so `brief-reader` calls the endpoints Notion's own public viewer uses (verified 2026-09-30; unofficial, so they can change):
+
+```
+POST https://www.notion.so/api/v3/loadPageChunk
+  {"pageId": "<dashed uuid>", "limit": 100, "cursor": {"stack": []}, "chunkNumber": 0, "verticalColumns": false}
+POST https://www.notion.so/api/v3/syncRecordValues
+  {"requests": [{"pointer": {"table": "block", "id": "<block id>", "spaceId": "<page's space id>"}, "version": -1}]}
+```
+
+- The page ID is the last 32 hex characters of the URL path, on `*.notion.site`, `notion.so` and `app.notion.com` links alike. `www.notion.so` serves every public page, whatever its site.
+- `loadPageChunk` pages with `cursor.stack`: send the returned stack back with `chunkNumber + 1` until it comes back empty. It returns the page's top-level blocks but **not the contents of collapsed toggles and toggle headings**, which is where rules pages keep most of their text (Curious Mike: 95 lines without them, ~1,700 with). Those are fetched by ID with `syncRecordValues`, which needs the page's `spaceId` (on each record in newer responses, `space_id` on the block in older ones), repeating until nothing under the page is missing (capped at 2,000 blocks).
+- Records come as `{value: <block>}` or, in newer responses, `{spaceId, value: {value: <block>, role}}`. Rich text is `[[text, [[annotation, arg?], ...]], ...]`: `a` is a link, and a `‣` segment is a mention (`p` page, `d` date, `u` user, `eoi` link preview). Link previews live in records the public endpoints don't serve, so the text says to open the page for them.
+- A private or deleted page returns **200 with an empty record map**; the two can't be told apart, and both are reported as `not_public`.
+- Cloudflare in front of Notion answers a request with no `User-Agent` (Node's fetch default) with a **403** HTML page, so the reader sends one. An HTTP error is `fetch_failed`, not `not_public`.
+
 ### Footage folder (Google Drive)
 
 **Keyless listing (preferred, verified 2026-09-22):** `GET https://drive.google.com/embeddedfolderview?id={folderId}` returns HTML listing the folder's files and subfolders for any link-shared folder, with no API key. Each item is a `<div class="flip-entry" id="entry-{id}">`: an `<a href>` to `/drive/folders/{id}` (folder) or `/file/d/{id}/view` (file), a list icon that for files is `…googleusercontent.com/16/type/{mimeType}` (e.g. `video/mp4`) and for folders carries `aria-label="Folder"`, a `flip-entry-title`, and a `flip-entry-last-modified` date. A missing or private folder returns 404. `footage-sources` recurses (depth 3, 40 folders by default). The Drive API option below is a fallback.
