@@ -124,15 +124,32 @@ export async function editCampaignConfig(ctx: ReviewCtx, id: string, configInput
 }
 
 /**
- * A reviewer removes a campaign they don't want, with its footage sources, jobs,
- * candidate clips and credit ledger rows, so it can be added again from scratch
- * later. Refused once anything was posted. The status history stays, and an audit
- * row records what was removed (OpusClip keeps its own projects and usage).
+ * Removes a campaign nobody wants, with its footage sources, jobs, candidate
+ * clips and credit ledger rows, so it can be added again from scratch later.
+ * Refused once anything was posted. The status history stays, and an audit row
+ * records what was removed (OpusClip keeps its own projects and usage).
+ *
+ * A reviewer does it from the review page by typing "delete". The operator only
+ * does it for a person who asked in the conversation (`request`: their name and
+ * why), the same exception as rejecting clips on request.
  */
-export async function deleteCampaign(ctx: ReviewCtx, id: string, confirmation: string | undefined) {
-  requireHuman(ctx);
+export async function deleteCampaign(
+  ctx: ReviewCtx,
+  id: string,
+  confirmation: string | undefined,
+  request?: { requestedBy: string; reason: string },
+) {
+  let onRequest: { requestedBy: string; reason: string } | null = null;
+  if (isHumanActor(ctx.actor)) {
+    if (confirmation?.trim().toLowerCase() !== "delete") throw new ReviewError("invalid_argument", "Type delete to confirm");
+  } else {
+    const requestedBy = request?.requestedBy.trim();
+    if (!requestedBy) {
+      throw new ReviewError("human_only", `Only a reviewer, or the operator for a person who asked (--requested-by), can delete a campaign (actor: ${ctx.actor})`);
+    }
+    onRequest = { requestedBy, reason: requireText(request?.reason, "A reason") };
+  }
   const c = await loadCampaign(ctx.db, id);
-  if (confirmation?.trim().toLowerCase() !== "delete") throw new ReviewError("invalid_argument", "Type delete to confirm");
   return ctx.db.transaction(async (tx) => {
     const jobs = await tx.select({ id: sourceJobs.id }).from(sourceJobs).where(eq(sourceJobs.campaignId, id));
     const jobIds = jobs.map((j) => j.id);
@@ -159,7 +176,7 @@ export async function deleteCampaign(ctx: ReviewCtx, id: string, confirmation: s
       entityId: id,
       action: "delete_campaign",
       actor: ctx.actor,
-      details: { title: c.title, contentRewardsCampaignId: c.contentRewardsCampaignId, status: c.status, ...removed },
+      details: { title: c.title, contentRewardsCampaignId: c.contentRewardsCampaignId, status: c.status, ...removed, ...(onRequest ?? {}) },
     });
     return { id, deleted: true as const, ...removed };
   });

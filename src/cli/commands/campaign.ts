@@ -6,10 +6,12 @@ import {
   listCampaigns,
   proposeConfig,
   readCampaignBrief,
+  resolveCampaign,
   scoutCampaigns,
   showCampaign,
   verifyConfig,
 } from "../../modules/campaigns/index.js";
+import { deleteCampaign } from "../../modules/review/index.js";
 import { positional, readJsonInput, requiredOption, type Command, type CommandContext } from "../run.js";
 
 const moduleCtx = (ctx: CommandContext) => ({ db: ctx.db(), actor: ctx.actor, connector: ctx.connector });
@@ -83,5 +85,18 @@ export const campaignCommands: Record<string, Command> = {
     usage: '<id> --reason "..."',
     options: { reason: { type: "string" } },
     run: (ctx) => flagCampaign(moduleCtx(ctx), positional(ctx, 0, "id"), requiredOption(ctx, "reason")),
+  },
+  delete: {
+    summary:
+      "Delete a campaign a person asked to have removed, with its sources, jobs and clips (it can be re-added later). Refused once any clip was posted. Only when a person asks; never on your own judgment.",
+    usage: '<id> --reason "..." --requested-by <name>',
+    options: { reason: { type: "string" }, "requested-by": { type: "string" } },
+    run: async (ctx) => {
+      const { id } = await resolveCampaign(ctx.db(), positional(ctx, 0, "id"));
+      return deleteCampaign({ db: ctx.db(), actor: ctx.actor }, id, undefined, {
+        reason: requiredOption(ctx, "reason"),
+        requestedBy: requiredOption(ctx, "requested-by"),
+      });
+    },
   },
 };

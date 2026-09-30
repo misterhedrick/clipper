@@ -102,6 +102,7 @@ clipper campaign brief <id> [--doc <url>]       (r) brief text + every hyperlink
 clipper campaign classify <id> --type <lf|ugc|music|slideshow|unclear> --reason "..."
 clipper campaign propose-config <id> --file config.json   validate (zod) + store draft; status → pending_confirmation
 clipper campaign flag <id> --reason "..."           status → needs_attention (announced by `attention notify`)
+clipper campaign delete <id> --reason "..." --requested-by <name>   remove a campaign and everything under it, only for a person who asked; refused once a clip was posted
 
 # Footage
 clipper footage list-url <url> [--campaign <id>] (r) expand a Drive folder (recursive, with folder paths), YouTube channel (15 most recent uploads, Shorts flagged) or file link into
