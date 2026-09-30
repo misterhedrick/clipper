@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   check,
   index,
   integer,
@@ -237,6 +238,9 @@ export const sourceJobs = pgTable(
     // Set once the video is uploaded to OpusClip's storage (`source upload`), for
     // hosts OpusClip won't fetch itself (Google Drive); submitted in place of sourceUrl.
     opusclipUploadId: text("opusclip_upload_id"),
+    // The video already has captions burned in (a creator's own subtitles): it's
+    // submitted with OpusClip's captions off so clips don't carry two caption layers.
+    sourceHasCaptions: boolean("source_has_captions").notNull().default(false),
     opusclipProjectId: text("opusclip_project_id"),
     opusclipStage: text("opusclip_stage"),
     retryCount: integer("retry_count").notNull().default(0),

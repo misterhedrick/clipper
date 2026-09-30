@@ -30,9 +30,12 @@ If the visual review recorded a `fail` that an OpusClip edit can genuinely fix, 
 - a misheard brand or word in the captions ("BOXABLE" → "BOXABL"): `replace_phrase` (same number of words; `occurrence: "all"` when it repeats);
 - a forbidden word or phrase spoken in the clip: `delete_phrase`;
 - a bad opening, dead air or a section that breaks a rule: `trim_section`, `drop_section`, `remove_pauses`;
-- a clip over the length limit: `trim_section`.
+- a clip over the length limit: `trim_section`;
+- **double captions** (`no_double_captions` failed: the source video's own burned-in captions show under OpusClip's): `set_captions` with `enabled: false`, keeping the creator's captions (the person's rule, 2026-09-30). This is the only case where captions may be turned off. Also run `clipper source mark-captions <jobId> --reason "..."` so any later submission of that video goes in without OpusClip's captions.
 
-Not fixable by editing, so leave it failed: no home shown, the wrong subject, too short, no BOXABL on screen. Never add a text overlay or turn captions off to make a check pass; the edit guard refuses those ops anyway.
+Not fixable by editing, so leave it failed: no home shown, the wrong subject, too short, no BOXABL on screen. Never add a text overlay, or turn captions off for anything but double captions, to make a check pass; the edit guard refuses those.
+
+Every clip's visual review has a `no_double_captions` check: `fail` when a second caption layer from the source video is visible anywhere (say where), `pass` when only one layer shows. When captions were switched off because of it, a spelling check on OpusClip's captions no longer applies: judge the creator's captions instead.
 
 1. `opusclip_edit_clip` with `dryRun: true`, and confirm the ops do exactly the fix.
 2. Run it for real, then poll `opusclip_describe_clip` until `render_pending: false`.

@@ -68,6 +68,25 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper footage …", () => {
     ]);
   });
 
+  it("select --source-captions marks a video with burned-in captions; mark-captions does it later, audited", async () => {
+    const other = "https://drive.google.com/file/d/VID_RAW2/view";
+    expect(await out("footage", "select", campaignId, "--url", VIDEO, "--reason", "creator burns in captions", "--source-captions")).toMatchObject({
+      sourceJob: { sourceHasCaptions: true },
+    });
+    const plain = await out("footage", "select", campaignId, "--url", other, "--reason", "raw episode");
+    expect(plain).toMatchObject({ sourceJob: { sourceHasCaptions: false } });
+
+    expect(await out("source", "mark-captions", plain.sourceJob.id)).toMatchObject({ error: { code: "usage" } });
+    const reason = "its first clips show the creator's own captions under OpusClip's";
+    expect(await out("source", "mark-captions", plain.sourceJob.id, "--reason", reason)).toEqual({ id: plain.sourceJob.id, sourceHasCaptions: true, changed: true });
+    expect(await out("source", "mark-captions", plain.sourceJob.id, "--reason", reason)).toMatchObject({ changed: false });
+    expect((await db.select().from(sourceJobs)).every((j) => j.sourceHasCaptions)).toBe(true);
+    expect(await db.select().from(auditLog).where(eq(auditLog.action, "mark_source_captions"))).toEqual([
+      expect.objectContaining({ entityId: plain.sourceJob.id, details: { reason } }),
+    ]);
+    expect(await out("source", "mark-captions", "00000000-0000-0000-0000-000000000000", "--reason", "x")).toMatchObject({ error: { code: "not_found" } });
+  });
+
   it("skip parks a video in skipped; a conflicting decision is refused", async () => {
     expect(await out("footage", "skip", campaignId, "--url", VIDEO, "--reason", "b-roll")).toMatchObject({
       sourceJob: { status: "skipped", decision: "skipped" },

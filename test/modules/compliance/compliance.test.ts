@@ -42,6 +42,7 @@ describe("objective checks", () => {
       required_on_screen_text: "manual_review_required",
       caption_compliance: "manual_review_required",
       english_language: "manual_review_required",
+      no_double_captions: "manual_review_required",
       visual_quality: "manual_review_required",
     });
   });

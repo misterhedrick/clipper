@@ -111,6 +111,13 @@ describe.skipIf(!TEST_DATABASE_URL)("submission protocol", () => {
       expect((await db.select().from(statusEvents)).map((e) => e.toStatus)).toEqual(["submitting"]);
     });
 
+    it("turns OpusClip's captions off for a video that already has burned-in captions", async () => {
+      const { jobId } = await setup();
+      await db.update(sourceJobs).set({ sourceHasCaptions: true }).where(eq(sourceJobs.id, jobId));
+      const r = await reserve(ctx(), jobId, { opusRemaining: 900, range: "0-600" });
+      expect(r.submitParams).toMatchObject({ enableCaption: false });
+    });
+
     it("refuses to reserve the same job twice", async () => {
       const { jobId } = await setup();
       await reserve(ctx(), jobId, { opusRemaining: 900, range: "0-600" });

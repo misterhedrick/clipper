@@ -29,6 +29,13 @@ export type CheckResults = Record<string, CheckOutcome>;
  */
 export const ENGLISH_CHECK = "english_language";
 
+/**
+ * One caption layer only: when the source video already has burned-in captions,
+ * OpusClip's captions land on top of them (seen 2026-09-30 on FaZe Rug's Boxabl
+ * video). Every clip's visual review settles it; the fix is turning OpusClip's off.
+ */
+export const DOUBLE_CAPTIONS_CHECK = "no_double_captions";
+
 const STOPWORDS = new Set(
   "the a an and or but to of in on at for with from by is are was were be been it its this that these those you your i me my we our they their he she his her how what why when who which not no can will just so if as all about into out up more most than then there here do does did have has had get got".split(" "),
 );
@@ -127,6 +134,7 @@ export function runObjectiveChecks(clip: ClipFacts, config: CampaignConfig): Che
   results[CAPTION_CHECK] = "manual_review_required";
   // A plain "not English" from OpusClip's text is a fail; anything else is for the visual review to confirm.
   results[ENGLISH_CHECK] = looksNonEnglish([clip.title, clip.description].filter(Boolean).join("\n")) ? "fail" : "manual_review_required";
+  results[DOUBLE_CAPTIONS_CHECK] = "manual_review_required";
 
   for (const name of review.requiredChecks) {
     if (!(name in results)) results[name] = "manual_review_required";
