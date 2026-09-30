@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Db } from "../../db/client.js";
 import { audit } from "../../db/audit.js";
 import { candidateClips, posts, sourceJobs, statusEvents, type PostPlatform, type PostStatus } from "../../db/schema.js";
+import { STANDING_RULES, transition } from "../../db/transition.js";
 import { loadCandidateWithContext } from "../../db/helpers.js";
 import { canonical } from "../submissions/index.js";
 import { validateCampaignConfig } from "../campaign-config/index.js";
@@ -388,7 +389,8 @@ const SCHEDULED = /^(scheduled|pending|queued|publishing|processing)$/i;
  * Brings our posts in line with opusclip_list_scheduled_posts: a confirmed post
  * becomes scheduled, a live one posted with its link, a failed one failed.
  * Matches on clip + account. Returns the newly live links not yet sent to the
- * person (`newLinks`); `social notify` sends them. Never changes a clip's status.
+ * person (`newLinks`); `social notify` sends them. Then marks posted every
+ * ready_to_post clip whose posts are all live with a link (`markLiveClipsPosted`).
  */
 export async function syncPosts(ctx: PostingCtx, input: unknown) {
   const listed = parseScheduledPosts(input);
@@ -440,7 +442,43 @@ export async function syncPosts(ctx: PostingCtx, input: unknown) {
     .select({ n: sql<number>`count(*)::int` })
     .from(posts)
     .where(inArray(posts.status, ["requested", "scheduled"]));
-  return { checked: listed.length, changes, unmatched, stillWaiting: waiting?.n ?? 0, newLinks: await linksToSend(ctx.db) };
+  const markedPosted = await markLiveClipsPosted(ctx);
+  return { checked: listed.length, changes, unmatched, stillWaiting: waiting?.n ?? 0, markedPosted, newLinks: await linksToSend(ctx.db) };
+}
+
+/**
+ * Standing rule (2026-09-30): a ready_to_post clip becomes posted once every one
+ * of its posts is live with a link, as OpusClip reported it (the person already
+ * confirmed each post in OpusClip). A post still waiting, failed, or live without
+ * its link yet leaves the clip for later, or for the person to mark by hand.
+ * Cancelled posts don't count. Covers every such clip, not only this sync's.
+ */
+export async function markLiveClipsPosted(ctx: PostingCtx) {
+  const rows = await ctx.db
+    .select({ clipId: candidateClips.id, post: posts })
+    .from(candidateClips)
+    .innerJoin(posts, eq(posts.candidateClipId, candidateClips.id))
+    .where(eq(candidateClips.status, "ready_to_post"));
+  const byClip = new Map<string, (typeof posts.$inferSelect)[]>();
+  for (const r of rows) byClip.set(r.clipId, [...(byClip.get(r.clipId) ?? []), r.post]);
+
+  const marked: { id: string; links: string[] }[] = [];
+  for (const [id, clipPosts] of byClip) {
+    const counted = clipPosts.filter((p) => p.status !== "cancelled");
+    if (!counted.length || !counted.every((p) => p.status === "posted" && p.url)) continue;
+    const links = counted.map((p) => `${p.platform}: ${p.url}`);
+    await transition(ctx.db, {
+      entity: "candidate_clip",
+      id,
+      to: "posted",
+      actor: ctx.actor,
+      reason: `live on ${links.join(", ")} (${STANDING_RULES.mark_posted_when_live})`,
+      standingRule: "mark_posted_when_live",
+      expectFrom: ["ready_to_post"],
+    });
+    marked.push({ id, links });
+  }
+  return marked;
 }
 
 // --- links for the person -----------------------------------------------------------------
