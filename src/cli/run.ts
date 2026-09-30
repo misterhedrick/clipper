@@ -22,6 +22,7 @@ import { FootageError } from "../modules/footage-sources/index.js";
 import { SourcingError } from "../modules/sourcing/index.js";
 import { FramesError } from "../modules/frames/index.js";
 import { PostingError } from "../modules/posting/index.js";
+import { ReviewError } from "../modules/review/index.js";
 
 // Every command prints one JSON document to stdout. Failures print
 // {"error":{"code","message"}} and exit non-zero, so the operator playbook can
@@ -165,7 +166,8 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<RunResult
       err instanceof PackagingError ||
       err instanceof NotifyError ||
       err instanceof FramesError ||
-      err instanceof PostingError
+      err instanceof PostingError ||
+      err instanceof ReviewError
     ) {
       return errorResult(err.code, err.message);
     }

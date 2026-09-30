@@ -281,7 +281,30 @@ describe.skipIf(!TEST_DATABASE_URL)("review web app", () => {
       const { cookie } = await login("alex");
       await db.insert(posts).values({ candidateClipId: candidateId, platform: "tiktok", url: "https://tiktok.com/@me/video/1" });
       expect(flash(await post(`/campaigns/${await activeId()}/delete`, { confirm: "delete" }, cookie)).error).toMatch(/posted/);
+      // Same for the operator acting on a person's request.
+      await expect(
+        deleteCampaign({ db, actor: "claude-operator" }, await activeId(), undefined, { requestedBy: "alex", reason: "not wanted" }),
+      ).rejects.toMatchObject({ code: "invalid_state" });
       expect(await db.select().from(candidateClips).where(eq(candidateClips.id, candidateId))).toHaveLength(1);
+    });
+
+    it("lets the operator delete only for a named person with a reason, removing everything under the campaign", async () => {
+      const id = await activeId();
+      const operator = { db, actor: "claude-operator" };
+      await expect(deleteCampaign(operator, id, "delete")).rejects.toMatchObject({ code: "human_only" });
+      await expect(deleteCampaign(operator, id, undefined, { requestedBy: " ", reason: "x" })).rejects.toMatchObject({ code: "human_only" });
+      await expect(deleteCampaign(operator, id, undefined, { requestedBy: "alex", reason: " " })).rejects.toMatchObject({ code: "invalid_argument" });
+      expect(await db.select().from(campaigns).where(eq(campaigns.id, id))).toHaveLength(1);
+
+      expect(await deleteCampaign(operator, id, undefined, { requestedBy: "alex", reason: "waiting list" })).toMatchObject({
+        deleted: true,
+        sourceJobs: 1,
+        candidateClips: 1,
+      });
+      expect(await db.select().from(candidateClips).where(eq(candidateClips.id, candidateId))).toHaveLength(0);
+      expect(await db.select().from(auditLog).where(eq(auditLog.action, "delete_campaign"))).toEqual([
+        expect.objectContaining({ actor: "claude-operator", details: expect.objectContaining({ requestedBy: "alex", reason: "waiting list" }) }),
+      ]);
     });
   });
 

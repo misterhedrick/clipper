@@ -13,11 +13,19 @@ const MW4 = "24ad920b-d24f-479e-9cef-f22182e4a0c0";
 const campaignPage = readFileSync(new URL("../fixtures/content-rewards-campaign-page.html", import.meta.url), "utf8");
 const listingPage = readFileSync(new URL("../fixtures/content-rewards-discover-listing.html", import.meta.url), "utf8");
 const docExport = readFileSync(new URL("../fixtures/google-doc-export.html", import.meta.url), "utf8");
+const notionChunks = (
+  JSON.parse(readFileSync(new URL("../fixtures/notion-load-page-chunk.json", import.meta.url), "utf8")) as { chunks: unknown[] }
+).chunks;
+const NOTION_RULES = "https://example-site.notion.site/Example-Clipping-Guidelines-11111111222233334444555555555555";
 
 // Serves captured pages instead of hitting Content Rewards / Google Docs.
-const fakeFetch = vi.fn(async (input: string | URL | Request) => {
+const fakeFetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
   const url = String(input);
   if (url.includes("/document/d/PRIVATE/")) return new Response("", { status: 401 });
+  if (url.endsWith("/api/v3/loadPageChunk")) {
+    return Response.json(notionChunks[(JSON.parse(String(init?.body)) as { chunkNumber: number }).chunkNumber]);
+  }
+  if (url.endsWith("/api/v3/syncRecordValues")) return Response.json({ recordMap: { __version__: 3 } });
   const body = url.endsWith("/discover")
     ? listingPage
     : url.includes("docs.google.com/document/")
@@ -158,7 +166,55 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper campaign …", () => {
     await db.update(campaigns).set({ guidelineDocUrl: null });
     const none = (await cli("campaign", "brief", MW4)).output as { doc: unknown; note: string };
     expect(none.doc).toBeNull();
-    expect(none.note).toMatch(/No Google Doc/);
+    expect(none.note).toMatch(/No Google Doc or Notion brief/);
+  });
+
+  it("brief falls back to a Notion rules page among the reference materials when there's no Google Doc", async () => {
+    await cli("campaign", "add", `https://contentrewards.com/discover/${MW4}`);
+    const [row] = await db.select().from(campaigns);
+    const snapshot = row!.crSnapshot as { referenceMaterials: { url: string; type: string | null }[] };
+    await db
+      .update(campaigns)
+      .set({
+        guidelineDocUrl: null,
+        crSnapshot: { ...snapshot, referenceMaterials: [{ url: "https://youtu.be/EPISODE1", type: "brandAsset" }, { url: NOTION_RULES, type: "brandAsset" }] },
+      })
+      .where(eq(campaigns.id, row!.id));
+    const res = await cli("campaign", "brief", MW4);
+    expect(res.exitCode).toBe(0);
+    const out = res.output as { doc: { source: string; docId: string; text: string }; linkedDocs: { url: string }[] };
+    expect(out.doc).toMatchObject({ source: "notion", docId: "11111111-2222-3333-4444-555555555555" });
+    expect(out.doc.text).toContain("Pays $1.25 per 1K views");
+    // Linked Google Docs and Notion pages are listed to read next; the page itself isn't.
+    expect(out.linkedDocs.map((l) => l.url)).toEqual([
+      "https://www.notion.so/00000000000000000000000000000009",
+      "https://docs.google.com/document/d/SUBDOC1/edit",
+      "https://www.notion.so/99999999888877776666555555555555",
+    ]);
+  });
+
+  describe("delete", () => {
+    it("deletes a campaign only for a named person with a reason, recording both, so it can be re-added", async () => {
+      await cli("campaign", "add", `https://contentrewards.com/discover/${MW4}`);
+      const [row] = await db.select().from(campaigns);
+      expect((await cli("campaign", "delete", MW4, "--reason", "waiting list")).output).toMatchObject({ error: { code: "usage" } });
+      expect((await cli("campaign", "delete", MW4, "--requested-by", "alex")).output).toMatchObject({ error: { code: "usage" } });
+      expect((await cli("campaign", "delete", MW4, "--reason", " ", "--requested-by", "alex")).output).toMatchObject({ error: { code: "usage" } });
+      expect(await db.select().from(campaigns)).toHaveLength(1);
+
+      const res = await cli("campaign", "delete", MW4, "--reason", "has a waiting list; not worth waiting", "--requested-by", "alex");
+      expect(res).toEqual({ exitCode: 0, output: expect.objectContaining({ id: row!.id, deleted: true, sourceJobs: 0, candidateClips: 0 }) });
+      expect(await db.select().from(campaigns)).toHaveLength(0);
+      expect(await db.select().from(auditLog).where(eq(auditLog.action, "delete_campaign"))).toEqual([
+        expect.objectContaining({
+          actor: "claude-operator",
+          entityId: row!.id,
+          details: expect.objectContaining({ requestedBy: "alex", reason: "has a waiting list; not worth waiting", contentRewardsCampaignId: MW4 }),
+        }),
+      ]);
+      expect((await cli("campaign", "delete", MW4, "--reason", "x", "--requested-by", "alex")).output).toMatchObject({ error: { code: "not_found" } });
+      expect((await cli("campaign", "add", `https://contentrewards.com/discover/${MW4}`)).output).toMatchObject({ created: true });
+    });
   });
 
   describe("propose-config", () => {
@@ -334,6 +390,8 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper campaign …", () => {
     for (const name of Object.keys(help.commands).filter((n) => n !== "campaign activate" && n !== "guard post")) {
       expect(name).not.toMatch(/approve|activate|confirm|post|publish|join/);
     }
+    // Deleting a campaign is a person's call: the command refuses to run without --requested-by.
+    expect(help.commands["campaign delete"]).toMatchObject({ usage: expect.stringContaining("--requested-by <name>") });
     // Publishing is planned and tracked, never done, by the CLI: the person confirms each post in OpusClip.
     expect(Object.keys(help.commands).filter((n) => n.startsWith("social "))).toEqual(["social queue", "social plan", "social requested", "social alert", "social cancel", "social sync", "social notify", "social list"]);
     await cli("campaign", "add", `https://contentrewards.com/discover/${MW4}`);
