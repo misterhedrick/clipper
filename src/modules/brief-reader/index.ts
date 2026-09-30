@@ -2,21 +2,21 @@
 // text plus every hyperlink. Uses the HTML export, not the text export: the text
 // export drops hyperlinks, and briefs often link footage from link text
 // ("Content Folder: HERE"). Anonymous only. A doc that wants sign-in is reported
-// as not_public, never worked around.
+// as not_public, never worked around. Public Notion pages are read by ./notion.ts;
+// readBriefDoc picks the reader from the URL.
 
-export type BriefReaderErrorCode = "not_a_google_doc" | "not_public" | "not_found" | "fetch_failed";
+import { BriefReaderError, type DocLink, type ReaderDeps } from "./types.js";
+import { parseNotionPageUrl, readNotionPage } from "./notion.js";
 
-export class BriefReaderError extends Error {
-  constructor(
-    public readonly code: BriefReaderErrorCode,
-    message: string,
-  ) {
-    super(message);
-    this.name = "BriefReaderError";
-  }
-}
-
-export type DocLink = { text: string; url: string };
+export { BriefReaderError, type BriefReaderErrorCode, type DocLink, type ReaderDeps } from "./types.js";
+export {
+  collectNotionBlocks,
+  missingNotionBlocks,
+  parseNotionPageUrl,
+  readNotionPage,
+  renderNotionPage,
+  type NotionPage,
+} from "./notion.js";
 
 export type GoogleDoc = {
   docId: string;
@@ -26,8 +26,6 @@ export type GoogleDoc = {
   /** Every distinct http(s) link, in document order, with Google's redirect wrapper removed. */
   links: DocLink[];
 };
-
-export type ReaderDeps = { fetch?: typeof fetch };
 
 const REQUEST_TIMEOUT_MS = 20_000;
 
@@ -153,4 +151,37 @@ function safeHost(url: string): string {
   } catch {
     return "";
   }
+}
+
+/** A brief document: a Google Doc or a Notion page, in one shape. */
+export type BriefDoc = {
+  source: "google_doc" | "notion";
+  /** Google Doc ID or Notion page ID. */
+  docId: string;
+  url: string;
+  text: string;
+  links: DocLink[];
+};
+
+/** Whether `url` is a brief document one of the readers can open. */
+export function isBriefDocUrl(url: string): boolean {
+  return parseGoogleDocUrl(url) !== null || parseNotionPageUrl(url) !== null;
+}
+
+/** The ID `readBriefDoc` would report for `url` (Google Doc ID or Notion page ID), or null. */
+export function briefDocId(url: string): string | null {
+  return parseGoogleDocUrl(url) ?? parseNotionPageUrl(url);
+}
+
+/** Reads a public Google Doc or Notion page. Anything else is `unsupported_doc`. */
+export async function readBriefDoc(url: string, deps: ReaderDeps = {}): Promise<BriefDoc> {
+  if (parseGoogleDocUrl(url)) {
+    const doc = await readGoogleDoc(url, deps);
+    return { source: "google_doc", ...doc };
+  }
+  if (parseNotionPageUrl(url)) {
+    const page = await readNotionPage(url, deps);
+    return { source: "notion", docId: page.pageId, url: page.url, text: page.text, links: page.links };
+  }
+  throw new BriefReaderError("unsupported_doc", `Not a Google Doc or Notion page URL: ${url}`);
 }

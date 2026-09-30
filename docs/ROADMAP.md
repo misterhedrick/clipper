@@ -82,7 +82,7 @@ flowchart TD
 | 2 | `campaign-connector`: Content Rewards page parsing | ✅ |
 | 3 | Schema v2 + guarded `transition()` + config cleanup | ✅ |
 | 4 | `clipper` CLI + campaign commands (scout, add, show, list, classify, flag) | ✅ |
-| 5 | Brief reader (`campaign brief`, links kept inline) | ✅ |
+| 5 | Brief reader (`campaign brief`, links kept inline) | ✅ · public Notion rules pages too, collapsed sections included (2026-09-30) |
 | 6 | Campaign config schema + `propose-config` | ✅ |
 | 7 | Footage sourcing (Drive folders, YouTube channels, select/skip) | ✅ |
 | 8 | Credit ledger + submit protocol + guard hook | ✅ **live** 2026-09-24: Drive upload (496 MB in 92 s) → reserve → guarded submit → project `P3092415v0K3` recorded, 10 credits |
@@ -115,6 +115,7 @@ flowchart TD
 
 - Content Rewards: the discover listing (50 campaigns) and individual campaign pages parse live.
 - Google Docs briefs: read with every link kept, including links the plain-text export loses (PULP, Ryan Zofay).
+- Notion rules pages: read in full, collapsed dropdowns included (Curious Mike, ~1,700 lines; Coinbase × Valorant), 2026-09-30.
 - Google Drive: folders list without an API key (Nilo: 13 folders, 137 files; Charlie Berens: 2 full specials).
 - YouTube: channels resolve to their latest uploads, with Shorts flagged.
 - OpusClip: connector live on the Pro plan (900 credits/month, 10 concurrent projects). No credits spent yet.
@@ -156,6 +157,7 @@ The **live database (Supabase)** holds one campaign as of 2026-09-24: **Charlie 
 ## 8. Known limits (v1)
 
 - **OpusClip can't ingest** Kick, MediaSilo, Notion pages or custom portals. Those campaigns need a person to supply footage, or get skipped.
+- **Notion pages are read through Notion's unofficial viewer endpoints** (`loadPageChunk`, `syncRecordValues`), which can change without notice. Link previews and inline databases on a page aren't included; the text says to open the page for them.
 - **Dropbox folders can't be listed** (the page renders in the browser). A person pastes direct file links.
 - **YouTube channels** show only the 15 most recent uploads (feed limit).
 - **Drive videos are copied into OpusClip** (`source upload`), because OpusClip refuses Drive links. It runs on the Render web service: a ~500 MB special takes a few minutes, and every upload counts against Render's free outbound bandwidth (100 GB/month).
