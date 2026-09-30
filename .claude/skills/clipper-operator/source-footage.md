@@ -28,6 +28,8 @@ For YouTube channels, apply the brief's content filter. If it says "videos with 
 
 For each video: `clipper footage select <campaignId> --url <entry.url> --name "<entry.name>" --path "<entry.path>" --from <registered source url> --reason "..."`, or the same with `footage skip`. Recording skips matters: it stops the next run from re-evaluating the same file. Decisions are final: a different decision on the same video returns `already_decided`, and only a person can change it.
 
+**Videos that already have captions.** Many creators burn their own subtitles into their videos (big YouTubers especially: FaZe Rug's Boxabl video does). OpusClip's captions then land on top of theirs. When you can tell a video has them (from the creator's other clips, a thumbnail, or an earlier project from the same channel), select it with `--source-captions`: it goes to OpusClip with captions off. If you only find out from its clips, the pre-screen turns captions off on those clips and marks the video (`source mark-captions`).
+
 Things to skip:
 - **Anything not in English.** Every account posts in English (2026-09-28). Before selecting, confirm the video's language from its title, description and channel, not from the creator's view count or a brand's approved list: a Turkish creator's tour cost 30 credits for 31 unusable clips. A non-English or unclear video is skipped with the language as the reason ("Turkish-language tour; accounts are English").
 - Files under ~2 minutes, which are probably finished clips or promos.

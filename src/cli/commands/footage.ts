@@ -7,10 +7,14 @@ const str = (ctx: CommandContext, name: string) => ctx.options[name] as string |
 const decide = (decision: "selected" | "skipped"): Command => ({
   summary:
     decision === "selected"
-      ? "Select one video for processing (creates a source job in `detected`)."
+      ? "Select one video for processing (creates a source job in `detected`). --source-captions when the video already has burned-in captions: it's submitted with OpusClip's captions off."
       : "Record a deliberate skip so the video isn't re-evaluated on later runs.",
-  usage: '<campaignId> --url <videoUrl> --reason "..." [--name <name>] [--path <folderPath>] [--from <footageSourceUrl>]',
+  usage:
+    decision === "selected"
+      ? '<campaignId> --url <videoUrl> --reason "..." [--name <name>] [--path <folderPath>] [--from <footageSourceUrl>] [--source-captions]'
+      : '<campaignId> --url <videoUrl> --reason "..." [--name <name>] [--path <folderPath>] [--from <footageSourceUrl>]',
   options: {
+    ...(decision === "selected" ? { "source-captions": { type: "boolean" as const } } : {}),
     url: { type: "string" },
     reason: { type: "string" },
     name: { type: "string" },
@@ -22,6 +26,7 @@ const decide = (decision: "selected" | "skipped"): Command => ({
       name: str(ctx, "name"),
       path: str(ctx, "path"),
       from: str(ctx, "from"),
+      sourceHasCaptions: ctx.options["source-captions"] === true,
     }),
 });
 

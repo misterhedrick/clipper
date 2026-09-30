@@ -166,7 +166,8 @@ export function buildSubmitParams(
     title: submitTitle(job.id),
     aspectRatio: c.aspectRatio,
     clipDurationsSec: [[c.minDurationSeconds, c.maxDurationSeconds]],
-    enableCaption: c.captionsEnabled,
+    // A video with its own burned-in captions gets none from OpusClip: two caption layers is unwatchable.
+    enableCaption: c.captionsEnabled && !job.sourceHasCaptions,
     ...(c.brandTemplateId ? { brandTemplateId: c.brandTemplateId } : {}),
     ...(range ? { rangeStart: range.start, rangeEnd: range.end } : {}),
   };

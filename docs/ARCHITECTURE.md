@@ -109,7 +109,7 @@ clipper footage list-url <url> [--campaign <id>] (r) expand a Drive folder (recu
                                                     entries {sourceKey, kind, name, url, path, isVideo, mimeType?, isShort?, publishedAt?, description?, views?};
                                                     with --campaign, each entry carries its recorded decision and `undecidedVideos` counts new ones
 clipper footage add <campaignId> --url <url> --reason "..." [--label "..."]   register a footage source (folder, channel or file); idempotent per URL
-clipper footage select <campaignId> --url <videoUrl> --reason "..." [--name n] [--path p] [--from <sourceUrl>]   → source_job (detected); idempotent
+clipper footage select <campaignId> --url <videoUrl> --reason "..." [--name n] [--path p] [--from <sourceUrl>] [--source-captions]   → source_job (detected); idempotent; --source-captions: the video has burned-in captions, so it's submitted with OpusClip's captions off
 clipper footage skip <campaignId> --url <videoUrl> --reason "..." [...]        record a deliberate skip (status skipped) so it isn't re-evaluated
 clipper footage list <campaignId> [--decision selected|skipped]               (r) registered sources and every decision with its reason
 
@@ -120,6 +120,7 @@ clipper source reserve <sourceJobId> --opus-remaining <n> [--range a-b] [--estim
                                                     budget + dedupe check, reserve credits → submitting; returns submitParams
 clipper source record-project <sourceJobId> --project-id <id>     → project_created
 clipper source record-failure <sourceJobId> --error "..."          classify, release reservation, set status
+clipper source mark-captions <sourceJobId> --reason "..."          the video has burned-in captions: later submissions go in with OpusClip's captions off
 clipper source list [--status s] [--campaign id]  (r)
 clipper credits                                 (r) budget used/remaining today, per campaign, and last reconciled OpusClip usage
 clipper credits reconcile --opus-used <n> --limit <n> --reset-at <iso>   record opusclip_get_usage's monthly figures

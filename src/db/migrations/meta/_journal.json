@@ -71,6 +71,13 @@
       "when": 1790633677377,
       "tag": "0009_simple_tempest",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790790712777,
+      "tag": "0010_chunky_blacklash",
+      "breakpoints": true
     }
   ]
 }

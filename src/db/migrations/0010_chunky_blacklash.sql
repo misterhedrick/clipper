@@ -1,0 +1,1 @@
+ALTER TABLE "source_jobs" ADD COLUMN "source_has_captions" boolean DEFAULT false NOT NULL;

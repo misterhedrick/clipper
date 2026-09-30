@@ -134,7 +134,7 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper candidate …", () => {
     });
 
     it("prescreen records an advisory verdict and changes no status", async () => {
-      stdin = JSON.stringify({ framesChecked: 20, summary: "Portrait gameplay", checks: { aspect_ratio: { result: "pass", evidence: "9:16 frames" }, english_language: { result: "pass", evidence: "English commentary and captions" } } });
+      stdin = JSON.stringify({ framesChecked: 20, summary: "Portrait gameplay", checks: { aspect_ratio: { result: "pass", evidence: "9:16 frames" }, english_language: { result: "pass", evidence: "English commentary and captions" }, no_double_captions: { result: "pass", evidence: "One caption layer" } } });
       await out("candidate", "visual-review", id, "--file", "-");
       expect(await out("candidate", "prescreen", id, "--verdict", "recommend", "--notes", "Clutch round, on-brief")).toMatchObject({
         status: "awaiting_review",
@@ -201,6 +201,7 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper candidate …", () => {
       aspect_ratio: { result: "pass", evidence: "Every frame is 9:16" },
       required_on_screen_text: { result: "pass", evidence: "BOXABL sign at 0:21" },
       english_language: { result: "pass", evidence: "English speech; captions in English throughout" },
+      no_double_captions: { result: "pass", evidence: "Only OpusClip's captions; the source has none of its own" },
       no_other_brand_watermarks: { result: "fail", evidence: "Creator's channel logo bottom-left 0:00-0:03" },
     };
     beforeEach(async () => {
@@ -218,7 +219,7 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper candidate …", () => {
         id,
         opusclipClipId: "P123.c1",
         visualReview: null,
-        visualChecks: ["aspect_ratio", "required_on_screen_text", "english_language", "no_other_brand_watermarks"],
+        visualChecks: ["aspect_ratio", "required_on_screen_text", "english_language", "no_double_captions", "no_other_brand_watermarks"],
       });
       expect(await out("candidate", "show", "nope")).toMatchObject({ error: { code: "invalid_argument" } });
     });
@@ -226,7 +227,7 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper candidate …", () => {
     it("records a result and evidence for exactly the visual checks", async () => {
       stdin = review({ aspect_ratio: allPass.aspect_ratio });
       expect(await out("candidate", "visual-review", id, "--file", "-")).toMatchObject({
-        error: { code: "invalid_argument", message: expect.stringContaining("missing required_on_screen_text, english_language, no_other_brand_watermarks") },
+        error: { code: "invalid_argument", message: expect.stringContaining("missing required_on_screen_text, english_language, no_double_captions, no_other_brand_watermarks") },
       });
       stdin = review({ ...allPass, duration: { result: "pass", evidence: "looks fine" } });
       expect(await out("candidate", "visual-review", id, "--file", "-")).toMatchObject({
@@ -347,11 +348,24 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper candidate …", () => {
         exitCode: 2,
         output: { reason: expect.stringContaining("add_text_overlay aren't allowed") },
       });
-      expect(await guard({ ops: [{ op: "set_captions", enabled: false }] })).toMatchObject({ exitCode: 2 });
+      // Turning captions off only fixes double captions; turning them on never.
+      expect(await guard({ ops: [{ op: "set_captions", enabled: false }] })).toMatchObject({
+        exitCode: 2,
+        output: { reason: expect.stringContaining("only fixes a failed no_double_captions") },
+      });
       expect(await guard({ projectId: "OTHER", ops: fix })).toMatchObject({ exitCode: 2 });
       expect(await guard({ clipId: "nope", ops: fix })).toMatchObject({ exitCode: 2 });
       stdin = "not json";
       expect((await cli("guard", "edit")).exitCode).toBe(2);
+
+      stdin = review({ ...allPass, no_double_captions: { result: "fail", evidence: "Creator's own captions under OpusClip's 0:00-0:45" } });
+      await out("candidate", "visual-review", id, "--file", "-");
+      expect(await guard({ ops: [{ op: "set_captions", enabled: false }] })).toMatchObject({ exitCode: 0, output: { allow: true } });
+      expect(await guard({ ops: [{ op: "set_captions", enabled: false }, ...fix] })).toMatchObject({ exitCode: 0 });
+      expect(await guard({ ops: [{ op: "set_captions", enabled: true }] })).toMatchObject({
+        exitCode: 2,
+        output: { reason: expect.stringContaining("set_captions aren't allowed") },
+      });
 
       // A reviewer's needs_edit allows any edit they asked for.
       await transition(db, { entity: "candidate_clip", id, to: "needs_edit", actor: "reviewer:test", reason: "add an outro card" });

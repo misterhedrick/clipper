@@ -15,7 +15,7 @@ export type SourcingCtx = { db: Db; actor: string; list?: ListDeps };
 
 export class SourcingError extends Error {
   constructor(
-    public readonly code: "already_decided" | "invalid_argument" | "invalid_state",
+    public readonly code: "already_decided" | "invalid_argument" | "invalid_state" | "not_found",
     message: string,
   ) {
     super(message);
@@ -69,7 +69,7 @@ export async function addFootageSource(ctx: SourcingCtx, campaignRef: string, ur
   });
 }
 
-type DecideOpts = { name?: string; path?: string; from?: string };
+type DecideOpts = { name?: string; path?: string; from?: string; sourceHasCaptions?: boolean };
 
 /**
  * Records the operator's decision about one video. `selected` creates a source job
@@ -132,6 +132,7 @@ export async function decideFootage(
         sourceName: opts.name ?? null,
         sourcePath: opts.path ?? null,
         sourceUrl: classified.videoUrl,
+        sourceHasCaptions: decision === "selected" && !!opts.sourceHasCaptions,
         decision,
         decisionReason: reason,
         decidedBy: ctx.actor,
@@ -149,6 +150,25 @@ export async function decideFootage(
   return { created: true, sourceJob: jobSummary(job) };
 }
 
+/**
+ * Marks a selected video as already carrying burned-in captions (found after
+ * selecting it, e.g. from its first clips). Any later submission of it goes in
+ * with OpusClip's captions off, and its clips' double captions may be switched
+ * off as an automatic fix. Audited; setting it twice is a no-op.
+ */
+export async function markSourceCaptions(ctx: SourcingCtx, jobId: string, reason: string) {
+  requireReason(reason);
+  const [job] = await ctx.db.select().from(sourceJobs).where(eq(sourceJobs.id, jobId));
+  if (!job) throw new SourcingError("not_found", `No source job ${jobId}`);
+  if (job.decision !== "selected") throw new SourcingError("invalid_argument", `Source job ${jobId} was skipped; only selected videos are submitted`);
+  if (job.sourceHasCaptions) return { id: job.id, sourceHasCaptions: true, changed: false };
+  await ctx.db.transaction(async (tx) => {
+    await tx.update(sourceJobs).set({ sourceHasCaptions: true, updatedAt: new Date() }).where(eq(sourceJobs.id, jobId));
+    await audit(tx, { entityType: "source_job", entityId: jobId, action: "mark_source_captions", actor: ctx.actor, details: { reason } });
+  });
+  return { id: job.id, sourceHasCaptions: true, changed: true };
+}
+
 function jobSummary(j: typeof sourceJobs.$inferSelect) {
   return {
     id: j.id,
@@ -160,6 +180,7 @@ function jobSummary(j: typeof sourceJobs.$inferSelect) {
     decision: j.decision,
     reason: j.decisionReason,
     status: j.status,
+    sourceHasCaptions: j.sourceHasCaptions,
   };
 }
 
