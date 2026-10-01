@@ -31,7 +31,7 @@ When a person asks for an operator run, go through these in order. Skip any step
 | Step | Procedure | Trigger |
 |---|---|---|
 | 1 | [Triage](triage.md) | `clipper attention list` is non-empty, or any job is stuck in `submitting` |
-| 2 | [Collect clips](collect.md) | jobs in `project_created` / `processing` |
+| 2 | [Collect clips](collect.md), then [renew preview links](collect.md#renew-preview-links) | jobs in `project_created` / `processing`; `clipper candidate stale-previews` non-empty |
 | 3 | [Look at, then pre-screen candidates](prescreen.md) | candidates in `awaiting_review` without a prescreen, or in `needs_edit`. Every recommend/hold needs a visual review of the clip's frames first. Finish with `clipper candidate reject-failed` |
 | 4 | [Export and package](collect.md#export-and-package) | candidates a person `approved` |
 | 4b | [Post](post.md) | posts waiting in `clipper social list` (sync them). Schedule new posts **only** when the person says "post next": the front of `clipper social queue` |

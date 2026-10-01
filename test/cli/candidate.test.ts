@@ -119,6 +119,32 @@ describe.skipIf(!TEST_DATABASE_URL)("clipper candidate …", () => {
     });
   });
 
+  describe("stale-previews", () => {
+    const at = (iso: string) => `https://signed-ext.cdn.opus.pro/m/c.x/VIDEO_PREVIEW.mp4?v=1&hdnts=URLPrefix=x~Expires=${Date.parse(iso) / 1000}~Signature=x`;
+
+    it("lists jobs whose waiting clips' preview links are expired or about to expire", async () => {
+      await upsert(fixture);
+      const now = Date.now();
+      const iso = (h: number) => new Date(Math.floor((now + h * 3_600_000) / 1000) * 1000).toISOString();
+      await db.update(candidateClips).set({ previewUrl: at(iso(-1)) }).where(eq(candidateClips.opusclipClipId, "P123.c1"));
+      await db.update(candidateClips).set({ previewUrl: at(iso(48)) }).where(eq(candidateClips.opusclipClipId, "P123.c2"));
+      await db.update(candidateClips).set({ previewUrl: at(iso(-5)), status: "rejected" }).where(eq(candidateClips.opusclipClipId, "P123.c3"));
+
+      const stale = await out("candidate", "stale-previews");
+      expect(stale.jobs).toHaveLength(1);
+      expect(stale.jobs[0]).toMatchObject({ jobId, projectId: "P123" });
+      // c2 has two days left; c3 was rejected, so nobody needs to watch it.
+      expect(stale.jobs[0].candidates).toEqual([{ id: (await clip("P123.c1")).id, status: "awaiting_review", previewExpiresAt: iso(-1) }]);
+      expect((await out("candidate", "stale-previews", "--within-hours", "72")).jobs[0].candidates).toHaveLength(2);
+
+      // Upserting a fresh list renews the link, and the job drops off.
+      const fresh = structuredClone(fixture);
+      for (const c of fresh.clips) c.preview_url = at(iso(72));
+      await upsert(fresh);
+      expect((await out("candidate", "stale-previews")).jobs).toEqual([]);
+    });
+  });
+
   describe("operator's advisory work", () => {
     let id: string;
     beforeEach(async () => {

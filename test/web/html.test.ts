@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { previewExpiry } from "../../src/modules/candidates/index.js";
 import { CLIENT_JS } from "../../src/web/client.js";
 import { html, page, refreshHref } from "../../src/web/html.js";
 
@@ -29,5 +30,14 @@ describe("page nav", () => {
 describe("client script", () => {
   it("is valid JavaScript", () => {
     expect(() => new Function(CLIENT_JS)).not.toThrow();
+  });
+});
+
+describe("previewExpiry", () => {
+  it("reads the Expires stamp of an OpusClip signed link", () => {
+    const url = "https://signed-ext.cdn.opus.pro/media/c.x/VIDEO_PREVIEW_-0-44594.mp4?v=1790789249693211&hdnts=URLPrefix=aHR0cA~Expires=1790978978~Signature=Kj";
+    expect(previewExpiry(url)?.toISOString()).toBe("2026-10-02T22:09:38.000Z");
+    expect(previewExpiry("https://cdn.opus.pro/p.mp4")).toBeUndefined();
+    expect(previewExpiry(null)).toBeUndefined();
   });
 });
