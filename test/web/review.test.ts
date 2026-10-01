@@ -130,7 +130,18 @@ describe.skipIf(!TEST_DATABASE_URL)("review web app", () => {
       const home = await app.inject({ method: "GET", url: "/", headers: { cookie } });
       expect(home.statusCode).toBe(200);
       expect(home.headers["content-security-policy"]).toContain("default-src 'none'");
+      // Scripts only from our own origin: /app.js, never inline.
+      expect(String(home.headers["content-security-policy"]).match(/script-src [^;]*/)?.[0]).toBe("script-src 'self'");
       expect(home.body).toContain("campaign config to confirm");
+      expect(home.body).toContain('<a class="refresh" href="/"');
+    });
+
+    it("serves the client script without a session", async () => {
+      const res = await app.inject({ method: "GET", url: "/app.js" });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["content-type"]).toMatch(/^text\/javascript/);
+      expect(res.headers["x-content-type-options"]).toBe("nosniff");
+      expect(res.body).toContain("pull");
     });
 
     it("refuses cross-site posts even with a valid session", async () => {
