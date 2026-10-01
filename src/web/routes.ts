@@ -3,7 +3,7 @@ import type { Db } from "../db/client.js";
 import { TransitionError } from "../db/transition.js";
 import { CANDIDATE_CLIP_STATUSES, POST_PLATFORMS, type CandidateClipStatus } from "../db/schema.js";
 import { InvalidConfigError, validateCampaignConfig, type CampaignConfig } from "../modules/campaign-config/index.js";
-import { CandidatesError, rejectCandidates, setCaption } from "../modules/candidates/index.js";
+import { CandidatesError, previewExpiry, rejectCandidates, setCaption } from "../modules/candidates/index.js";
 import {
   campaignDetail,
   campaignsForReview,
@@ -450,7 +450,7 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
             const passed = checks.filter(([, v]) => v === "pass").length;
             const failed = checks.filter(([, v]) => v === "fail").length;
             const toCheck = checks.length - passed - failed;
-            const thumb = safeUrl(clip.thumbnailUrl);
+            const thumb = (previewExpiry(clip.thumbnailUrl)?.getTime() ?? Infinity) > (opts.now?.() ?? new Date()).getTime() ? safeUrl(clip.thumbnailUrl) : undefined;
             const verdict = clip.prescreenVerdict;
             const tone = verdict === "recommend" ? "ok" : verdict === "reject" ? "bad" : verdict ? "warn" : "";
             // One badge summing up the checks, so a closed row still says what needs a look.
@@ -503,6 +503,9 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
       }
       const preview = safeUrl(clip.previewUrl);
       const poster = safeUrl(clip.thumbnailUrl);
+      // OpusClip's signed links die 24 hours after they're fetched; say so instead of showing a player that can't play.
+      const previewExpiresAt = previewExpiry(clip.previewUrl);
+      const previewExpired = previewExpiresAt !== undefined && previewExpiresAt <= (opts.now?.() ?? new Date());
       const checks = Object.entries(clip.checkResults ?? {});
       const anyFail = checks.some(([k, v]) => v === "fail" && k !== "caption_compliance");
       // Evidence is shown only for the render it describes; an edit since makes it stale.
@@ -526,7 +529,13 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
           <h1>${clip.title ?? clip.opusclipClipId}</h1>
           <p class="muted">${campaign.title} · ${job.sourceName ?? job.sourceKey} · status <strong>${clip.status.replace(/_/g, " ")}</strong></p>
           <div class="grid">
-            <div>${preview ? html`<video controls preload="metadata" src="${preview}" poster="${poster ?? ""}"></video>` : html`<div class="card muted">No preview URL.</div>`}</div>
+            <div>${
+              !preview
+                ? html`<div class="card muted">No preview URL.</div>`
+                : previewExpired
+                  ? html`<div class="card"><strong>Preview link expired</strong> (${when(previewExpiresAt)}).<p class="muted">OpusClip's preview links last 24 hours and only Claude can fetch new ones: ask for an operator run, or "refresh the previews". Every run renews links that are about to expire.</p></div>`
+                  : html`<video controls preload="metadata" src="${preview}" poster="${poster ?? ""}"></video>`
+            }</div>
             <div class="card">
               <p><strong>Duration</strong> ${seconds(clip.durationMs)} · <strong>Score</strong> ${clip.opusclipScore ?? "?"}
                 ${clip.opusclipSubScores ? html`<span class="muted">(${Object.entries(clip.opusclipSubScores).map(([k, v]) => `${k} ${v}`).join(", ")})</span>` : ""}</p>

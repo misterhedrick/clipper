@@ -91,7 +91,7 @@ flowchart TD
 | 10b | Visual review: Claude looks at every clip's frames and records each check with evidence before recommending | ✅ 2026-09-27 |
 | 10c | Self-verified campaign activation: Claude checks its config against the campaign page and brief, activates, and pings you to join | ✅ 2026-09-27 |
 | 10d | Posting through OpusClip: Claude schedules every approved clip on each account (spaced out), you confirm in OpusClip, links come back to Discord | ✅ **live** 2026-09-28: the approved Boxabl clip went out on TikTok, Instagram and YouTube through the guard, links synced back to Discord (too late for Boxabl's 30-minute submit window, hence the watch step) |
-| 11 | Review web page (confirm configs, approve clips, record posts) | ✅ · phone menu, Refresh button and pull-to-refresh for the installed home-screen app (2026-10-01) |
+| 11 | Review web page (confirm configs, approve clips, record posts) | ✅ · phone menu, Refresh button and pull-to-refresh for the installed home-screen app (2026-10-01) · OpusClip preview links expire after 24 h: the page says so, and each run renews them (`candidate stale-previews`, 2026-10-01) |
 | 12 | Ready-to-Post packaging to R2 + notifications | ✅ code · notifications ✅ live · R2 bucket ✅ live and verified |
 | 13 | Deploy: Render web (free) + Supabase Postgres (free) + on-demand operator runs | ✅ review page **live**; operator remote mode **live and verified from a cloud session**; Discord notifications **live and verified** 2026-09-23; manual empty-queue run done 2026-09-23 (report: "Needs you: nothing") |
 | 14 | End to end on a real campaign, twice (idempotency) | ⏳ |

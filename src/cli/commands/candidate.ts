@@ -9,6 +9,7 @@ import {
   rejectFailedCandidates,
   setCaption,
   showCandidate,
+  stalePreviews,
   upsertCandidates,
 } from "../../modules/candidates/index.js";
 import { DEFAULT_EVERY_SEC, extractFrames } from "../../modules/frames/index.js";
@@ -41,6 +42,18 @@ export const candidateCommands: Record<string, Command> = {
       const db = ctx.db();
       const campaignId = ctx.options.campaign ? (await resolveCampaign(db, ctx.options.campaign as string)).id : undefined;
       return listCandidates(db, { status: ctx.options.status as string | undefined, campaignId, jobId: ctx.options.job as string | undefined });
+    },
+  },
+  "stale-previews": {
+    summary:
+      "(read-only) Jobs with clips still awaiting a person (awaiting_review, needs_edit, approved) whose preview link has expired or expires within --within-hours (default 12; links last 24 h). Renew with opusclip_list_clips + `candidate upsert` for each job.",
+    usage: "[--within-hours <h>]",
+    options: { "within-hours": { type: "string" } },
+    run: (ctx) => {
+      const raw = ctx.options["within-hours"] as string | undefined;
+      const withinHours = raw === undefined ? undefined : Number(raw);
+      if (withinHours !== undefined && !(withinHours >= 0)) throw new UsageError("--within-hours must be a number of hours, 0 or more");
+      return stalePreviews(ctx.db(), { withinHours });
     },
   },
   show: {
