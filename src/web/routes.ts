@@ -23,7 +23,7 @@ import {
 import { BUNDLE_FILES, type BundleStore } from "../modules/packaging/index.js";
 import { postQueue } from "../modules/posting/index.js";
 import { createSession, readCookie, REVIEWER_NAME, SESSION_COOKIE, sessionCookie, tokenMatches, verifySession } from "./auth.js";
-import { badge, checkTally, fold, html, page, safeUrl, seconds, when, type Html } from "./html.js";
+import { badge, checkTally, fold, html, page, refreshHref, safeUrl, seconds, when, type Html } from "./html.js";
 
 // The review web app: the one place a person confirms campaigns, decides clips
 // and records posts. Every route except /login requires a signed-in reviewer,
@@ -180,7 +180,7 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
     });
 
     const view = (req: FastifyRequest, reply: FastifyReply, title: string, body: Html, code = 200) =>
-      send(reply, page({ title, reviewer: req.reviewer!, flash: flashOf(req), body }), code);
+      send(reply, page({ title, reviewer: req.reviewer!, path: refreshHref(req.url), flash: flashOf(req), body }), code);
 
     // Overview
     scope.get("/", async (req, reply) => {

@@ -67,11 +67,37 @@ export function checkTally(results: [string, string][]): Html {
   return html`Checks: ${passed} of ${results.length} passed${failed ? html` <span class="badge bad">${failed} failed</span>` : ""}${toCheck ? html` <span class="badge warn">${toCheck} to check</span>` : ""}`;
 }
 
-export function page(opts: { title: string; reviewer?: string; flash?: { ok?: string; error?: string }; body: Html }): string {
+const NAV_LINKS: [href: string, label: string][] = [
+  ["/", "Overview"],
+  ["/campaigns", "Campaigns"],
+  ["/review", "Review queue"],
+  ["/posts", "Posting"],
+];
+
+/** The current URL minus the one-shot flash params, so Refresh reloads the view without repeating its message. */
+export function refreshHref(url: string): string {
+  const u = new URL(url, "http://x");
+  u.searchParams.delete("ok");
+  u.searchParams.delete("error");
+  return u.pathname + u.search;
+}
+
+// No JavaScript (the CSP allows none), so the mobile menu is a <details> and Refresh is a plain link:
+// an installed home-screen app has no browser reload button or pull-to-refresh.
+export function page(opts: { title: string; reviewer?: string; path?: string; flash?: { ok?: string; error?: string }; body: Html }): string {
+  const here = opts.path ? new URL(opts.path, "http://x").pathname : undefined;
+  const isHere = (href: string) => (href === "/" ? here === "/" : here === href || here?.startsWith(`${href}/`));
+  const links = NAV_LINKS.map(([href, label]) => html`<a href="${href}"${isHere(href) ? html` class="here" aria-current="page"` : ""}>${label}</a>`);
+  const signOut = html`<form method="post" action="/logout" class="inline"><span class="muted">${opts.reviewer ?? ""}</span> <button class="link">Sign out</button></form>`;
   const nav = opts.reviewer
     ? html`<nav>
-        <a href="/">Overview</a><a href="/campaigns">Campaigns</a><a href="/review">Review queue</a><a href="/posts">Posting</a>
-        <form method="post" action="/logout" class="inline"><span class="muted">${opts.reviewer}</span> <button class="link">Sign out</button></form>
+        <details class="menu">
+          <summary aria-label="Menu">☰ Menu</summary>
+          <div class="menu-panel">${links}${signOut}</div>
+        </details>
+        <div class="nav-links">${links}</div>
+        <a class="refresh" href="${opts.path ?? ""}" aria-label="Refresh">↻ Refresh</a>
+        <div class="nav-signout">${signOut}</div>
       </nav>`
     : "";
   return html`<!doctype html>
@@ -93,12 +119,29 @@ export function page(opts: { title: string; reviewer?: string; flash?: { ok?: st
   body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
   main { max-width: 1000px; margin: 0 auto; padding: 12px; }
   @media (min-width: 640px) { main { padding: 20px; } }
-  nav { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 12px 12px; border-bottom: 1px solid var(--line); background: var(--card); font-size: 14px; box-shadow: var(--shadow-sm); }
-  @media (min-width: 640px) { nav { gap: 20px; padding: 14px 20px; font-size: 15px; } }
+  nav { position: sticky; top: 0; z-index: 10; display: flex; gap: 12px; align-items: center; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); border-bottom: 1px solid var(--line); background: var(--card); font-size: 15px; box-shadow: var(--shadow-sm); }
   nav a { color: var(--accent); font-weight: 500; transition: color 0.2s; white-space: nowrap; }
   nav a:hover { color: var(--accent-dark); }
+  nav a.here { color: var(--fg); font-weight: 700; }
   nav button { white-space: nowrap; }
-  nav form { margin-left: auto; }
+  nav a.refresh { margin-left: auto; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; }
+  nav a.refresh:hover { text-decoration: none; background: var(--bg); }
+  /* Phones: links and Sign out live in the ☰ menu; Refresh stays in the bar. */
+  details.menu { background: none; border: none; padding: 0; margin: 0; }
+  details.menu > summary { list-style: none; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; color: var(--fg); }
+  details.menu > summary::-webkit-details-marker { display: none; }
+  details.menu[open] > summary { background: var(--bg); }
+  .menu-panel { position: absolute; left: 0; right: 0; top: 100%; display: flex; flex-direction: column; background: var(--card); border-bottom: 1px solid var(--line); box-shadow: var(--shadow); }
+  .menu-panel a, .menu-panel form { padding: 14px 16px; border-top: 1px solid var(--line); font-size: 16px; }
+  .menu-panel a.here { background: var(--bg); }
+  .nav-links, .nav-signout { display: none; }
+  @media (min-width: 640px) {
+    nav { gap: 20px; padding: 10px 20px; }
+    details.menu { display: none; }
+    .nav-links { display: flex; gap: 20px; }
+    .nav-signout { display: block; }
+    nav a.refresh { margin-left: auto; }
+  }
   a { color: var(--accent); text-decoration: none; transition: color 0.2s; }
   a:hover { color: var(--accent-dark); text-decoration: underline; }
   h1 { font-size: 1.5rem; font-weight: 700; margin: 12px 0 16px; letter-spacing: -0.5px; }
@@ -146,7 +189,7 @@ export function page(opts: { title: string; reviewer?: string; flash?: { ok?: st
   button.secondary:hover { background: var(--bg); box-shadow: var(--shadow); }
   button.danger { background: linear-gradient(135deg, var(--bad), #991b1b); }
   button.danger:hover { box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3); }
-  button.link { background: none; border: none; color: var(--accent); padding: 0; margin: 0; font-weight: 600; }
+  button.link { background: none; border: none; color: var(--accent); padding: 0; margin: 0; font-weight: 600; box-shadow: none; }
   button.link:hover { color: var(--accent-dark); }
   form.inline { display: inline; }
   video { width: 100%; max-height: 50vh; background: #000; border-radius: 8px; box-shadow: var(--shadow); }
