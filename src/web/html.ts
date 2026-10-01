@@ -82,8 +82,8 @@ export function refreshHref(url: string): string {
   return u.pathname + u.search;
 }
 
-// No JavaScript (the CSP allows none), so the mobile menu is a <details> and Refresh is a plain link:
-// an installed home-screen app has no browser reload button or pull-to-refresh.
+// Works without JavaScript: the mobile menu is a <details> and Refresh is a plain link, since an installed
+// home-screen app has no browser reload button. /app.js (client.ts) adds pull-to-refresh and the rest on top.
 export function page(opts: { title: string; reviewer?: string; path?: string; flash?: { ok?: string; error?: string }; body: Html }): string {
   const here = opts.path ? new URL(opts.path, "http://x").pathname : undefined;
   const isHere = (href: string) => (href === "/" ? here === "/" : here === href || here?.startsWith(`${href}/`));
@@ -106,6 +106,7 @@ export function page(opts: { title: string; reviewer?: string; path?: string; fl
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${opts.title} · Clipper review</title>
+<script src="/app.js" defer></script>
 <style>
   :root { --bg: #f8f6f3; --fg: #1f1f1f; --muted: #6b6b6b; --line: #e0dcd8; --card: #fff; --accent: #3b82f6; --accent-dark: #1e40af;
           --ok: #059669; --ok-bg: #ecfdf5; --bad: #dc2626; --bad-bg: #fef2f2; --warn: #d97706; --warn-bg: #fffbeb;
@@ -135,6 +136,13 @@ export function page(opts: { title: string; reviewer?: string; path?: string; fl
   .menu-panel a, .menu-panel form { padding: 14px 16px; border-top: 1px solid var(--line); font-size: 16px; }
   .menu-panel a.here { background: var(--bg); }
   .nav-links, .nav-signout { display: none; }
+  /* /app.js: pull-to-refresh arrow, refresh spinner, busy buttons. */
+  .pull { position: fixed; top: max(8px, env(safe-area-inset-top)); left: 50%; z-index: 20; width: 36px; height: 36px; margin: -44px 0 0 -18px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--card); color: var(--muted); box-shadow: var(--shadow); font-size: 20px; opacity: 0; transition: opacity .15s, color .15s; pointer-events: none; }
+  .pull.pulling { opacity: 1; }
+  .pull.ready { color: var(--accent); }
+  .refreshing nav a.refresh { pointer-events: none; opacity: .6; }
+  .refreshing main { opacity: .5; transition: opacity .2s; }
+  button.busy { opacity: .6; cursor: progress; }
   @media (min-width: 640px) {
     nav { gap: 20px; padding: 10px 20px; }
     details.menu { display: none; }

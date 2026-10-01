@@ -23,6 +23,7 @@ import {
 import { BUNDLE_FILES, type BundleStore } from "../modules/packaging/index.js";
 import { postQueue } from "../modules/posting/index.js";
 import { createSession, readCookie, REVIEWER_NAME, SESSION_COOKIE, sessionCookie, tokenMatches, verifySession } from "./auth.js";
+import { CLIENT_JS } from "./client.js";
 import { badge, checkTally, fold, html, page, refreshHref, safeUrl, seconds, when, type Html } from "./html.js";
 
 // The review web app: the one place a person confirms campaigns, decides clips
@@ -52,7 +53,7 @@ const LOGIN_MAX_FAILURES = 10;
 
 const SECURITY_HEADERS = {
   "content-security-policy":
-    "default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; media-src https:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+    "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src https: data:; media-src https:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
   "x-frame-options": "DENY",
   "x-content-type-options": "nosniff",
   // Preview URLs are signed; don't leak them (or our paths) to other sites. Not
@@ -125,6 +126,15 @@ export function registerReviewRoutes(app: FastifyInstance, opts: ReviewAppOption
     });
 
   const safeNext = (n: string | undefined) => (n && n.startsWith("/") && !n.startsWith("//") ? n : "/");
+
+  // The one script (see client.ts). Public like /login: it holds no data. Revalidated on every load so a
+  // deploy reaches the installed app at once.
+  app.get("/app.js", async (_req, reply) =>
+    reply
+      .type("text/javascript; charset=utf-8")
+      .headers({ "cache-control": "no-cache", "x-content-type-options": "nosniff" })
+      .send(CLIENT_JS),
+  );
 
   app.get("/login", async (req, reply) => send(reply, loginPage(safeNext((req.query as Form).next))));
 

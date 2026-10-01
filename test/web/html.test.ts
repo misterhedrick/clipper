@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CLIENT_JS } from "../../src/web/client.js";
 import { html, page, refreshHref } from "../../src/web/html.js";
 
 describe("refreshHref", () => {
@@ -16,10 +17,17 @@ describe("page nav", () => {
     for (const label of ["Overview", "Campaigns", "Review queue", "Posting", "Sign out"]) expect(menu).toContain(label);
     expect(out).toContain('<a class="refresh" href="/review?status=approved" aria-label="Refresh">');
     expect(menu).toContain('<a href="/review" class="here" aria-current="page">');
-    expect(out).not.toContain("<script");
+    // Only our own script file, never inline code (the CSP refuses inline scripts).
+    expect(out.match(/<script[^>]*>/g)).toEqual(['<script src="/app.js" defer>']);
   });
 
   it("shows no nav when signed out", () => {
     expect(page({ title: "Sign in", body: html`` })).not.toContain("<nav>");
+  });
+});
+
+describe("client script", () => {
+  it("is valid JavaScript", () => {
+    expect(() => new Function(CLIENT_JS)).not.toThrow();
   });
 });
