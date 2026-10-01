@@ -165,6 +165,19 @@ describe.skipIf(!TEST_DATABASE_URL)("review web app", () => {
       expect(list.body).toContain("Pending &lt;b&gt;campaign&lt;/b&gt;");
     });
 
+    it("says a preview link has expired instead of showing a player that can't play", async () => {
+      const { cookie } = await login();
+      const page = async () => (await app.inject({ method: "GET", url: `/candidates/${candidateId}`, headers: { cookie } })).body;
+      expect(await page()).toContain("<video");
+      const signed = (expires: number) => `https://signed-ext.cdn.opus.pro/m/c.x/VIDEO_PREVIEW.mp4?v=1&hdnts=URLPrefix=x~Expires=${expires}~Signature=x`;
+      await db.update(candidateClips).set({ previewUrl: signed(Math.floor(Date.now() / 1000) + 3600) }).where(eq(candidateClips.id, candidateId));
+      expect(await page()).toContain("<video");
+      await db.update(candidateClips).set({ previewUrl: signed(Math.floor(Date.now() / 1000) - 60) }).where(eq(candidateClips.id, candidateId));
+      const body = await page();
+      expect(body).not.toContain("<video");
+      expect(body).toContain("Preview link expired");
+    });
+
     it("shows the operator's visual review evidence, only for the render it describes", async () => {
       const { cookie } = await login();
       const visualReview = {

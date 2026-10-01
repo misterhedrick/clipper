@@ -306,6 +306,47 @@ export async function listCandidates(db: Db, filter: { status?: string; campaign
   };
 }
 
+// --- preview links -----------------------------------------------------------------
+
+/**
+ * When an OpusClip signed preview/thumbnail URL stops working (its `Expires=`
+ * stamp, 24 hours after `opusclip_list_clips` issued it), or undefined if
+ * the URL carries no stamp.
+ */
+export function previewExpiry(url: string | null | undefined): Date | undefined {
+  const m = /[?&~]Expires=(\d+)(?:\D|$)/.exec(url ?? "");
+  return m ? new Date(Number(m[1]) * 1000) : undefined;
+}
+
+/** Statuses where a person may still need to watch the clip. */
+const PREVIEWED: readonly CandidateClipStatus[] = ["awaiting_review", "needs_edit", "approved"];
+
+/**
+ * Jobs whose clips a person may still watch but whose preview link has expired
+ * or expires within `withinHours` (default 12). Upserting a fresh `opusclip_list_clips` for
+ * each job renews the links.
+ */
+export async function stalePreviews(db: Db, opts: { withinHours?: number; now?: Date } = {}) {
+  const now = opts.now ?? new Date();
+  const cutoff = now.getTime() + (opts.withinHours ?? 12) * 3_600_000;
+  const rows = await db
+    .select({ clip: candidateClips, job: sourceJobs })
+    .from(candidateClips)
+    .innerJoin(sourceJobs, eq(sourceJobs.id, candidateClips.sourceJobId))
+    .where(inArray(candidateClips.status, [...PREVIEWED]))
+    .orderBy(asc(candidateClips.createdAt));
+  const jobs = new Map<string, { jobId: string; projectId: string | null; candidates: { id: string; status: string; previewExpiresAt: string }[] }>();
+  for (const { clip, job } of rows) {
+    const expires = previewExpiry(clip.previewUrl);
+    // A link without an Expires stamp isn't OpusClip's signed kind: nothing to renew.
+    if (!expires || expires.getTime() > cutoff) continue;
+    const entry = jobs.get(job.id) ?? { jobId: job.id, projectId: job.opusclipProjectId, candidates: [] };
+    entry.candidates.push({ id: clip.id, status: clip.status, previewExpiresAt: expires.toISOString() });
+    jobs.set(job.id, entry);
+  }
+  return { jobs: [...jobs.values()] };
+}
+
 /**
  * One candidate, as `listCandidates` describes it, plus the checks its visual
  * review has to cover (empty when the campaign has no confirmed config).
