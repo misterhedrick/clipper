@@ -14,7 +14,7 @@ A recommend or hold vouches for what's on screen, so the CLI refuses those verdi
    - `pass`: you saw it satisfied. Say where ("BOXABL sign 0:21", "captions read 'BOXABL' at 0:02").
    - `fail`: you saw it broken. Say exactly what and when ("captions read 'BOXABLE' at 0:13").
    - `manual_review_required`: frames can't settle it (motion, audio, pacing, a rule about the whole cut). Say why.
-   Also note anything off-brief you spot, even with no check for it (another brand's watermark, a clip that ends mid-sentence, a talking head where the brief wants the product).
+   Also note anything off-brief you spot, even with no check for it (another brand's watermark, a clip that ends mid-sentence, a talking head where the brief wants the product, or a vertical crop that's zoomed in too far: the subject cut off, people half out of frame, the source's own captions cut off at the edges). A bad crop can't be fixed by an edit (we don't letterbox), so it's a `reject` verdict with the crop as the reason, left for the person since no check failed.
 4. Record it: `clipper candidate visual-review <id> --file review.json` with
    ```json
    {"framesChecked": 18, "summary": "one or two sentences a reviewer can trust",
